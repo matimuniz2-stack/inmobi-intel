@@ -97,7 +97,7 @@ pnpm format:check
 
 - [x] **M1**: monorepo + docker-compose
 - [x] **M2**: schema Prisma + 52 zonas resueltas (MdP region + 48 barrios CABA)
-- [ ] **M3**: scraper MercadoLibre + cotización USD
+- [x] **M3**: scraper MercadoLibre con Playwright + cotización USD blue
 - [ ] **M4**: frontend Next.js con búsqueda reversa
 - [ ] **M5**: cron diario en GitHub Actions
 - [ ] **M6**: deploy a Supabase + Vercel

@@ -160,7 +160,7 @@ docker-compose up -d        # arrancar postgres + redis localmente
 Progreso:
 - [x] **M1** — monorepo + docker-compose
 - [x] **M2** — schema Prisma + 52 zonas (MdP region + 48 barrios CABA) resueltas contra ML
-- [ ] **M3** — scraper de MercadoLibre + cotización USD
+- [x] **M3** — scraper MercadoLibre con Playwright + dolar blue + tests con fixtures
 - [ ] **M4** — frontend Next.js + búsqueda reversa
 - [ ] **M5** — cron diario (GitHub Actions)
 - [ ] **M6** — deploy Supabase + Vercel
