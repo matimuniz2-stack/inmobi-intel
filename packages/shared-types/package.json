@@ -1,0 +1,22 @@
+{
+  "name": "@inmobi/shared-types",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tipos compartidos entre web y scrapers (zonas, enums, DTOs)",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./zones": "./src/zones.ts",
+    "./zones.json": "./src/data/zones.json"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "zones:resolve": "tsx scripts/resolve-ml-cities.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

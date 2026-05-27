@@ -157,6 +157,16 @@ docker-compose up -d        # arrancar postgres + redis localmente
 
 **Fase 1 — MVP**: scraper de MercadoLibre + búsqueda reversa funcional end-to-end.
 
+Progreso:
+- [x] **M1** — monorepo + docker-compose
+- [x] **M2** — schema Prisma + 52 zonas (MdP region + 48 barrios CABA) resueltas contra ML
+- [ ] **M3** — scraper de MercadoLibre + cotización USD
+- [ ] **M4** — frontend Next.js + búsqueda reversa
+- [ ] **M5** — cron diario (GitHub Actions)
+- [ ] **M6** — deploy Supabase + Vercel
+
+Decisiones técnicas tomadas durante Fase 1: ver `docs/decisions/`.
+
 Plan completo en `../plan-app-scraper-inmobiliario.md`. Fases siguientes documentadas ahí.
 
 ---

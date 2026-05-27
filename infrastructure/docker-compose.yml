@@ -2,11 +2,15 @@ name: inmobi-intel
 
 services:
   postgres:
-    image: postgis/postgis:16-3.4
+    # Fase 1 usa postgres vanilla. PostGIS volverá cuando habilitemos vista mapa (Fase 2/3).
+    # La imagen postgis precargaba tablas (spatial_ref_sys, tiger.*, topology.*) que
+    # confunden a `prisma migrate dev` (le piden reset al ver tablas que no son del schema).
+    image: postgres:16-alpine
     container_name: inmobi-postgres
     restart: unless-stopped
+    # Host port 5433 (no 5432) para no chocar con otros proyectos locales que ya usen 5432.
     ports:
-      - "5432:5432"
+      - "5433:5432"
     environment:
       POSTGRES_USER: inmobi
       POSTGRES_PASSWORD: inmobi_dev

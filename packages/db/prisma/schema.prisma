@@ -1,0 +1,127 @@
+// Inmobi Intel — Prisma schema
+// Convención: campos camelCase en TS, columnas snake_case en Postgres vía @map.
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Portal {
+  MERCADOLIBRE
+  // Fase 2: ARGENPROP, ZONAPROP, PROPERATI, REMAX
+}
+
+enum OperationType {
+  SALE
+  RENT
+  TEMP_RENT
+}
+
+enum PropertyType {
+  APT
+  HOUSE
+  PH
+  LOCAL
+  TERRENO
+  OTRO
+}
+
+enum Currency {
+  ARS
+  USD
+}
+
+enum ScrapeJobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+model Property {
+  id String @id @default(uuid()) @db.Uuid
+
+  portal   Portal
+  portalId String @map("portal_id")
+  url      String
+
+  operationType OperationType @map("operation_type")
+  propertyType  PropertyType  @map("property_type")
+
+  priceAmount        Decimal  @map("price_amount") @db.Decimal(14, 2)
+  priceCurrency      Currency @map("price_currency")
+  priceUsdNormalized Decimal? @map("price_usd_normalized") @db.Decimal(14, 2)
+
+  expensesAmount   Decimal?  @map("expenses_amount") @db.Decimal(14, 2)
+  expensesCurrency Currency? @map("expenses_currency")
+
+  bedrooms   Int?
+  bathrooms  Int?
+  totalSqm   Decimal? @map("total_sqm") @db.Decimal(10, 2)
+  coveredSqm Decimal? @map("covered_sqm") @db.Decimal(10, 2)
+
+  addressFull  String?  @map("address_full")
+  neighborhood String?
+  city         String?
+  province     String?
+  lat          Decimal? @db.Decimal(9, 6)
+  lng          Decimal? @db.Decimal(9, 6)
+
+  photos      Json    @default("[]")
+  description String? @db.Text
+  amenities   Json    @default("{}")
+
+  agencyName  String? @map("agency_name")
+  agencyPhone String? @map("agency_phone")
+  agencyEmail String? @map("agency_email")
+  agencyUrl   String? @map("agency_url")
+
+  zoneSlug String? @map("zone_slug")
+
+  firstSeenAt   DateTime @default(now()) @map("first_seen_at") @db.Timestamptz
+  lastSeenAt    DateTime @default(now()) @map("last_seen_at") @db.Timestamptz
+  lastUpdatedAt DateTime @updatedAt @map("last_updated_at") @db.Timestamptz
+
+  isActive Boolean @default(true) @map("is_active")
+
+  @@unique([portal, portalId])
+  @@index([operationType, propertyType, neighborhood])
+  @@index([zoneSlug, operationType, priceUsdNormalized])
+  @@index([lastSeenAt])
+  @@index([isActive])
+  @@map("properties")
+}
+
+model ScrapeJob {
+  id           String          @id @default(uuid()) @db.Uuid
+  portal       Portal
+  params       Json
+  status       ScrapeJobStatus @default(PENDING)
+  startedAt    DateTime?       @map("started_at") @db.Timestamptz
+  completedAt  DateTime?       @map("completed_at") @db.Timestamptz
+  itemsFound   Int             @default(0) @map("items_found")
+  itemsCreated Int             @default(0) @map("items_created")
+  itemsUpdated Int             @default(0) @map("items_updated")
+  errorLog     Json?           @map("error_log")
+  createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([portal, status])
+  @@index([createdAt])
+  @@map("scrape_jobs")
+}
+
+model UsdRate {
+  id         String   @id @default(uuid()) @db.Uuid
+  source     String
+  rate       Decimal  @db.Decimal(10, 2)
+  recordedAt DateTime @default(now()) @map("recorded_at") @db.Timestamptz
+
+  @@index([recordedAt])
+  @@index([source, recordedAt])
+  @@map("usd_rates")
+}

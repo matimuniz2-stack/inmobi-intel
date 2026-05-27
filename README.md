@@ -40,6 +40,8 @@ app-inmobi/
 
 > **Windows + OneDrive**: el repo vive en una carpeta sincronizada con OneDrive. Si ves problemas de file locking al instalar `node_modules`, pausá la sincronización mientras trabajás, o movemos el repo más adelante.
 
+> **Puerto Postgres**: usamos `5433` (no `5432`) para no chocar con otros proyectos locales (ej. `zamboni-postgres`).
+
 ---
 
 ## Bootstrap (Fase 1, M1)
@@ -72,9 +74,17 @@ pnpm db:logs      # sigue los logs
 pnpm db:down      # detiene el servicio (preserva volumen)
 pnpm db:reset     # destruye y recrea el volumen (CUIDADO)
 
-# Workspace (cuando haya código en los packages)
-pnpm typecheck
-pnpm lint
+# Schema / DB
+pnpm db:generate  # regenera el Prisma Client (cuando cambia schema.prisma)
+pnpm db:migrate   # crea + aplica una migration nueva (dev)
+pnpm db:studio    # abre Prisma Studio en el browser
+
+# Zonas (config-driven)
+pnpm zones:resolve            # llena mlStateId/mlCityId/mlNeighborhoodId desde la API de ML
+pnpm zones:resolve -- --force # fuerza re-resolución incluso si ya estaban
+
+# Workspace
+pnpm typecheck    # tsc --noEmit en todos los packages
 pnpm format       # prettier --write
 pnpm format:check
 ```
@@ -86,7 +96,7 @@ pnpm format:check
 **Fase 1 en curso** — milestones:
 
 - [x] **M1**: monorepo + docker-compose
-- [ ] **M2**: schema Prisma + zonas config-driven
+- [x] **M2**: schema Prisma + 52 zonas resueltas (MdP region + 48 barrios CABA)
 - [ ] **M3**: scraper MercadoLibre + cotización USD
 - [ ] **M4**: frontend Next.js con búsqueda reversa
 - [ ] **M5**: cron diario en GitHub Actions

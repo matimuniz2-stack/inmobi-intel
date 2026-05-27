@@ -16,10 +16,17 @@
     "db:up": "docker compose -f infrastructure/docker-compose.yml up -d",
     "db:down": "docker compose -f infrastructure/docker-compose.yml down",
     "db:logs": "docker compose -f infrastructure/docker-compose.yml logs -f postgres",
-    "db:reset": "docker compose -f infrastructure/docker-compose.yml down -v && pnpm db:up"
+    "db:reset": "docker compose -f infrastructure/docker-compose.yml down -v && pnpm db:up",
+    "db:generate": "pnpm --filter @inmobi/db db:generate",
+    "db:migrate": "pnpm --filter @inmobi/db db:migrate",
+    "db:studio": "pnpm --filter @inmobi/db db:studio",
+    "zones:resolve": "pnpm --filter @inmobi/shared-types zones:resolve"
   },
   "devDependencies": {
     "prettier": "^3.3.3",
     "typescript": "^5.6.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["@prisma/client", "@prisma/engines", "esbuild", "prisma"]
   }
 }
