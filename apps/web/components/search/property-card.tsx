@@ -13,7 +13,7 @@ import {
 
 interface PropertyLike {
   id: string;
-  portal: 'MERCADOLIBRE' | 'ARGENPROP';
+  portal: 'MERCADOLIBRE' | 'ARGENPROP' | 'ZONAPROP';
   portalId: string;
   url: string;
   operationType: 'SALE' | 'RENT' | 'TEMP_RENT';
@@ -51,12 +51,14 @@ const TYPE_LABEL: Record<PropertyLike['propertyType'], string> = {
 const PORTAL_LABEL: Record<PropertyLike['portal'], string> = {
   MERCADOLIBRE: 'MercadoLibre',
   ARGENPROP: 'Argenprop',
+  ZONAPROP: 'ZonaProp',
 };
 
 // Brand colors per portal — add new portals here as we wire them in.
 const PORTAL_BADGE_CLASS: Record<PropertyLike['portal'], string> = {
   MERCADOLIBRE: 'bg-yellow-300 text-yellow-950 hover:bg-yellow-300 border-yellow-400',
   ARGENPROP: 'bg-emerald-500 text-white hover:bg-emerald-500 border-emerald-600',
+  ZONAPROP: 'bg-red-600 text-white hover:bg-red-600 border-red-700',
 };
 
 function firstPhoto(photos: unknown): string | null {
