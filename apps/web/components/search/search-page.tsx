@@ -15,6 +15,7 @@ import { ZoneCombobox } from './zone-combobox';
 
 type Operation = 'SALE' | 'RENT' | 'TEMP_RENT' | '';
 type PropertyType = 'APT' | 'HOUSE' | 'PH' | 'LOCAL' | 'TERRENO' | 'OTRO' | '';
+type Sort = 'recent' | 'price_asc' | 'price_desc';
 
 interface Filters {
   zoneSlug: string | null;
@@ -23,6 +24,7 @@ interface Filters {
   bedroomsMin: string;
   priceUsdMin: string;
   priceUsdMax: string;
+  sort: Sort;
 }
 
 const PAGE_SIZE = 24;
@@ -34,6 +36,7 @@ const DEFAULT_FILTERS: Filters = {
   bedroomsMin: '',
   priceUsdMin: '',
   priceUsdMax: '',
+  sort: 'recent',
 };
 
 function toQueryInput(f: Filters, offset: number) {
@@ -44,6 +47,7 @@ function toQueryInput(f: Filters, offset: number) {
     bedroomsMin: f.bedroomsMin ? Number(f.bedroomsMin) : undefined,
     priceUsdMin: f.priceUsdMin ? Number(f.priceUsdMin) : undefined,
     priceUsdMax: f.priceUsdMax ? Number(f.priceUsdMax) : undefined,
+    sort: f.sort,
     offset,
     limit: PAGE_SIZE,
   };
@@ -114,7 +118,7 @@ export function SearchPage() {
           </aside>
 
           <section className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="text-sm text-muted-foreground">
                 {query.isPending ? (
                   <span className="inline-flex items-center gap-2">
@@ -126,10 +130,25 @@ export function SearchPage() {
                     {query.data.total === 1 ? 'propiedad' : 'propiedades'}
                   </>
                 ) : null}
+                {query.isFetching && !query.isPending && (
+                  <span className="ml-2 text-xs">· actualizando…</span>
+                )}
               </div>
-              {query.isFetching && !query.isPending && (
-                <span className="text-xs text-muted-foreground">Actualizando…</span>
-              )}
+              <div className="flex items-center gap-2">
+                <Label htmlFor="sort" className="text-xs text-muted-foreground">
+                  Ordenar por
+                </Label>
+                <select
+                  id="sort"
+                  value={filters.sort}
+                  onChange={(e) => updateFilter('sort', e.target.value as Sort)}
+                  className="h-8 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="recent">Más recientes</option>
+                  <option value="price_asc">Precio: menor a mayor</option>
+                  <option value="price_desc">Precio: mayor a menor</option>
+                </select>
+              </div>
             </div>
 
             {query.isError && (

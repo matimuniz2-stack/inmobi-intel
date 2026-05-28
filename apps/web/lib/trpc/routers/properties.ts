@@ -8,6 +8,8 @@ import { publicProcedure, router } from '../server';
 const OperationEnum = z.enum(['SALE', 'RENT', 'TEMP_RENT']);
 const PropertyTypeEnum = z.enum(['APT', 'HOUSE', 'PH', 'LOCAL', 'TERRENO', 'OTRO']);
 
+const SortEnum = z.enum(['recent', 'price_asc', 'price_desc']);
+
 const SearchInput = z.object({
   zoneSlug: z.string().min(1).optional(),
   operationType: OperationEnum.optional(),
@@ -15,6 +17,7 @@ const SearchInput = z.object({
   bedroomsMin: z.number().int().min(0).max(20).optional(),
   priceUsdMin: z.number().nonnegative().optional(),
   priceUsdMax: z.number().nonnegative().optional(),
+  sort: SortEnum.default('recent'),
   limit: z.number().int().min(1).max(48).default(24),
   offset: z.number().int().min(0).default(0),
 });
@@ -54,10 +57,17 @@ export const propertiesRouter = router({
         : {}),
     };
 
+    const orderBy: Prisma.PropertyOrderByWithRelationInput[] =
+      input.sort === 'price_asc'
+        ? [{ priceUsdNormalized: { sort: 'asc', nulls: 'last' } }, { id: 'asc' }]
+        : input.sort === 'price_desc'
+          ? [{ priceUsdNormalized: { sort: 'desc', nulls: 'last' } }, { id: 'asc' }]
+          : [{ lastUpdatedAt: 'desc' }, { id: 'asc' }];
+
     const [rawItems, total] = await Promise.all([
       prisma.property.findMany({
         where,
-        orderBy: [{ lastUpdatedAt: 'desc' }, { id: 'asc' }],
+        orderBy,
         skip: input.offset,
         take: input.limit,
       }),
