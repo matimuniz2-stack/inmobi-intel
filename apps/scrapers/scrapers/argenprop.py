@@ -48,11 +48,13 @@ OPERATION_SLUG: dict[str, str] = {
 
 
 def build_url(zone: dict, operation: str, prop_type: str, page: int = 1) -> str:
+    """Argenprop paginates via path suffix: `{base}-pagina-N`. The query-string
+    form `?pagina=N` looks valid but silently returns page 1."""
     type_slug = PROP_TYPE_SLUG[prop_type]
     op_slug = OPERATION_SLUG[operation]
     loc_slug = zone.get("argenpropSlug") or zone["slug"]
     base = f"https://www.argenprop.com/{type_slug}/{op_slug}/{loc_slug}"
-    return f"{base}?pagina={page}" if page > 1 else base
+    return f"{base}-pagina-{page}" if page > 1 else base
 
 
 class ArgenpropScraper(BaseScraper):
