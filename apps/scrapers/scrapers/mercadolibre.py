@@ -43,16 +43,23 @@ def slugify(name: str) -> str:
 
 
 def build_url(zone: dict, operation: str, page: int = 1) -> str:
+    """Build the listings URL. ML uses two formats; we use the canonical pagination one
+    (`inmuebles.mercadolibre.com.ar/inmuebles-<op>-<state>-<city>[-<barrio>]_Desde_N_...`).
+    Verified via Playwright click on the 'next' button.
+    """
     op_slug = OPERATION_SLUGS[operation]
-    parts = [op_slug, slugify(zone["mlState"]), slugify(zone["mlCity"])]
+    parts = ["inmuebles", op_slug, slugify(zone["mlState"]), slugify(zone["mlCity"])]
     if zone.get("mlNeighborhood"):
         parts.append(slugify(zone["mlNeighborhood"]))
-    base = f"https://listado.mercadolibre.com.ar/inmuebles/{'/'.join(parts)}/_DisplayType_LF"
+    path = "-".join(parts)
     if page > 1:
-        # ML pagination: _From_N where N is the 1-based offset of the first item
-        offset = (page - 1) * 48 + 1
-        return f"{base}_NoIndex_True_From_{offset}"
-    return base
+        # ML returns 50 items per page; offset is the 1-based index of the first item.
+        offset = (page - 1) * 50 + 1
+        return (
+            f"https://inmuebles.mercadolibre.com.ar/"
+            f"{path}_Desde_{offset}_DisplayType_LF_NoIndex_True"
+        )
+    return f"https://inmuebles.mercadolibre.com.ar/{path}_DisplayType_LF"
 
 
 class MercadoLibreScraper(BaseScraper):
@@ -87,6 +94,7 @@ class MercadoLibreScraper(BaseScraper):
     ) -> ScrapeResult:
         result = ScrapeResult()
         page = await self._ctx.new_page()
+        prev_first_id: str | None = None
         try:
             for page_num in range(1, (max_pages or 50) + 1):
                 url = build_url(zone, operation, page=page_num)
@@ -108,6 +116,11 @@ class MercadoLibreScraper(BaseScraper):
                 if not cards:
                     log.info("scrape_page_zero_parsed", html_size=len(html))
                     break
+
+                if prev_first_id is not None and cards[0].portal_id == prev_first_id:
+                    log.warning("scrape_pagination_stuck", first_id=cards[0].portal_id)
+                    break
+                prev_first_id = cards[0].portal_id
 
                 if page_num == 1:
                     total = detect_total_results(html)

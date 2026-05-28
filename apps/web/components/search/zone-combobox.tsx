@@ -33,9 +33,14 @@ export function ZoneCombobox({ value, onChange, placeholder = 'Cualquier zona' }
   );
 
   const groups = React.useMemo(() => {
-    const mdp = filtered.filter((z) => z.province === 'Buenos Aires');
+    const mdp = filtered.filter(
+      (z) => z.province === 'Buenos Aires' && z.mlCity === 'Mar del Plata',
+    );
+    const alrededores = filtered.filter(
+      (z) => z.province === 'Buenos Aires' && z.mlCity !== 'Mar del Plata',
+    );
     const caba = filtered.filter((z) => z.province === 'CABA');
-    return { mdp, caba };
+    return { mdp, alrededores, caba };
   }, [filtered]);
 
   const selected = value ? zonesBySlug.get(value) : null;
@@ -81,8 +86,31 @@ export function ZoneCombobox({ value, onChange, placeholder = 'Cualquier zona' }
               </CommandGroup>
             )}
             {groups.mdp.length > 0 && (
-              <CommandGroup heading="Mar del Plata + alrededores">
+              <CommandGroup heading="Mar del Plata + barrios">
                 {groups.mdp.map((z) => (
+                  <CommandItem
+                    key={z.slug}
+                    value={z.slug}
+                    onSelect={() => {
+                      onChange(z.slug);
+                      setOpen(false);
+                      setQuery('');
+                    }}
+                  >
+                    <Check
+                      className={cn(
+                        'mr-2 h-4 w-4',
+                        value === z.slug ? 'opacity-100' : 'opacity-0',
+                      )}
+                    />
+                    {z.displayName}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+            {groups.alrededores.length > 0 && (
+              <CommandGroup heading="Alrededores">
+                {groups.alrededores.map((z) => (
                   <CommandItem
                     key={z.slug}
                     value={z.slug}

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { prisma, type Prisma } from '@inmobi/db';
+import { zonesBySlug } from '@inmobi/shared-types';
 
 import { publicProcedure, router } from '../server';
 
@@ -20,9 +21,24 @@ const SearchInput = z.object({
 
 export const propertiesRouter = router({
   search: publicProcedure.input(SearchInput).query(async ({ input }) => {
+    // Resolve the selected zone to a (city, neighborhood?) filter.
+    // - Zone w/ mlNeighborhood: filter by exact neighborhood within the city
+    //   (CABA barrios + MdP barrios both use this path)
+    // - Zone w/ only mlCity: filter by city (catch-all for MdP and its surroundings)
+    // - No zone: no spatial filter
+    const zone = input.zoneSlug ? zonesBySlug.get(input.zoneSlug) : null;
+    const zoneFilter: Prisma.PropertyWhereInput = zone
+      ? zone.mlNeighborhood
+        ? {
+            neighborhood: { equals: zone.mlNeighborhood, mode: 'insensitive' },
+            city: { equals: zone.mlCity, mode: 'insensitive' },
+          }
+        : { city: { equals: zone.mlCity, mode: 'insensitive' } }
+      : {};
+
     const where: Prisma.PropertyWhereInput = {
       isActive: true,
-      ...(input.zoneSlug ? { zoneSlug: input.zoneSlug } : {}),
+      ...zoneFilter,
       ...(input.operationType ? { operationType: input.operationType } : {}),
       ...(input.propertyType ? { propertyType: input.propertyType } : {}),
       ...(input.bedroomsMin !== undefined

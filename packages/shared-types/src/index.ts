@@ -4,4 +4,4 @@ export {
   findZonesByQuery,
   type Zone,
   type Province,
-} from './zones.js';
+} from './zones';
