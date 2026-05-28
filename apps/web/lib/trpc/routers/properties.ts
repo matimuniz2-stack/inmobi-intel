@@ -9,12 +9,13 @@ const OperationEnum = z.enum(['SALE', 'RENT', 'TEMP_RENT']);
 const PropertyTypeEnum = z.enum(['APT', 'HOUSE', 'PH', 'LOCAL', 'TERRENO', 'OTRO']);
 
 const SortEnum = z.enum(['recent', 'price_asc', 'price_desc']);
+const BedroomsFilter = z.union([z.number().int().min(1).max(20), z.literal('5plus')]);
 
 const SearchInput = z.object({
   zoneSlug: z.string().min(1).optional(),
   operationType: OperationEnum.optional(),
   propertyType: PropertyTypeEnum.optional(),
-  bedroomsMin: z.number().int().min(0).max(20).optional(),
+  bedrooms: BedroomsFilter.optional(),
   priceUsdMin: z.number().nonnegative().optional(),
   priceUsdMax: z.number().nonnegative().optional(),
   sort: SortEnum.default('recent'),
@@ -44,8 +45,10 @@ export const propertiesRouter = router({
       ...zoneFilter,
       ...(input.operationType ? { operationType: input.operationType } : {}),
       ...(input.propertyType ? { propertyType: input.propertyType } : {}),
-      ...(input.bedroomsMin !== undefined
-        ? { bedrooms: { gte: input.bedroomsMin } }
+      ...(input.bedrooms !== undefined
+        ? input.bedrooms === '5plus'
+          ? { bedrooms: { gte: 5 } }
+          : { bedrooms: input.bedrooms }
         : {}),
       ...(input.priceUsdMin !== undefined || input.priceUsdMax !== undefined
         ? {

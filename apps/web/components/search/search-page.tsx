@@ -17,11 +17,13 @@ type Operation = 'SALE' | 'RENT' | 'TEMP_RENT' | '';
 type PropertyType = 'APT' | 'HOUSE' | 'PH' | 'LOCAL' | 'TERRENO' | 'OTRO' | '';
 type Sort = 'recent' | 'price_asc' | 'price_desc';
 
+type BedroomsFilter = '' | '1' | '2' | '3' | '4' | '5plus';
+
 interface Filters {
   zoneSlug: string | null;
   operationType: Operation;
   propertyType: PropertyType;
-  bedroomsMin: string;
+  bedrooms: BedroomsFilter;
   priceUsdMin: string;
   priceUsdMax: string;
   sort: Sort;
@@ -33,18 +35,24 @@ const DEFAULT_FILTERS: Filters = {
   zoneSlug: null,
   operationType: 'SALE',
   propertyType: '',
-  bedroomsMin: '',
+  bedrooms: '',
   priceUsdMin: '',
   priceUsdMax: '',
   sort: 'recent',
 };
 
 function toQueryInput(f: Filters, offset: number) {
+  const bedrooms: number | '5plus' | undefined =
+    f.bedrooms === ''
+      ? undefined
+      : f.bedrooms === '5plus'
+        ? ('5plus' as const)
+        : Number(f.bedrooms);
   return {
     zoneSlug: f.zoneSlug ?? undefined,
     operationType: f.operationType === '' ? undefined : f.operationType,
     propertyType: f.propertyType === '' ? undefined : f.propertyType,
-    bedroomsMin: f.bedroomsMin ? Number(f.bedroomsMin) : undefined,
+    bedrooms,
     priceUsdMin: f.priceUsdMin ? Number(f.priceUsdMin) : undefined,
     priceUsdMax: f.priceUsdMax ? Number(f.priceUsdMax) : undefined,
     sort: f.sort,
@@ -70,7 +78,7 @@ export function SearchPage() {
     filters.zoneSlug,
     filters.operationType,
     filters.propertyType,
-    filters.bedroomsMin,
+    filters.bedrooms,
     filters.priceUsdMin,
     filters.priceUsdMax,
   ]);
@@ -261,17 +269,20 @@ function FiltersPanel({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="bedrooms">Ambientes (mínimo)</Label>
-        <Input
+        <Label htmlFor="bedrooms">Ambientes</Label>
+        <select
           id="bedrooms"
-          type="number"
-          inputMode="numeric"
-          min={0}
-          max={20}
-          value={filters.bedroomsMin}
-          onChange={(e) => updateFilter('bedroomsMin', e.target.value)}
-          placeholder="cualquiera"
-        />
+          value={filters.bedrooms}
+          onChange={(e) => updateFilter('bedrooms', e.target.value as BedroomsFilter)}
+          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <option value="">Cualquiera</option>
+          <option value="1">1 (monoambiente)</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5plus">5 o más</option>
+        </select>
       </div>
 
       <div className="space-y-2">
