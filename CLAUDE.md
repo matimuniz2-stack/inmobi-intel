@@ -163,7 +163,7 @@ Progreso:
 - [x] **M3** — scraper MercadoLibre con Playwright + dolar blue + tests con fixtures
 - [x] **M4** — frontend Next.js 15 + tRPC + búsqueda reversa con 5 filtros + mobile-first
 - [x] **M5** — workflows GitHub Actions (CI + cron diario 3am ART con smoke test)
-- [ ] **M6** — deploy Supabase + Vercel
+- [x] **M6** — Supabase (proyecto `inmobi-intel`, sa-east-1) + Vercel (https://inmobi-intel.vercel.app), 2047 propiedades populadas
 
 Decisiones técnicas tomadas durante Fase 1: ver `docs/decisions/`.
 

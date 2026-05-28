@@ -100,7 +100,7 @@ pnpm format:check
 - [x] **M3**: scraper MercadoLibre con Playwright + cotización USD blue
 - [x] **M4**: frontend Next.js + tRPC + búsqueda reversa funcional
 - [x] **M5**: workflows GitHub Actions (cron diario + CI typecheck/tests)
-- [ ] **M6**: deploy a Supabase + Vercel
+- [x] **M6**: deploy a Supabase (sa-east-1) + Vercel — **<https://inmobi-intel.vercel.app>**
 
 Mirá [`CLAUDE.md`](./CLAUDE.md) para el plan completo de fases.
 

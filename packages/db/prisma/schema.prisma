@@ -7,8 +7,12 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // En Supabase: DATABASE_URL apunta al pgbouncer transaction pooler (6543);
+  // DIRECT_URL apunta al session pooler (5432) y se usa para migrations.
+  // En local: DIRECT_URL puede quedar igual a DATABASE_URL o sin definir.
+  directUrl = env("DIRECT_URL")
 }
 
 enum Portal {

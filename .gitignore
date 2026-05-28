@@ -44,5 +44,11 @@ prisma/migrations/dev.db*
 coverage/
 .nyc_output/
 
+# Vercel
+.vercel/
+
+# Supabase / cloud creds (gitignored — never commit)
+.supabase-creds.local
+
 # Misc
 *.tgz
