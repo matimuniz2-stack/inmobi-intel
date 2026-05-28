@@ -137,7 +137,8 @@ class MercadoLibreScraper(BaseScraper):
                     for card in cards:
                         try:
                             inserted = upsert_property(
-                                conn, card, zone_slug=zone["slug"], usd_rate=usd_rate
+                                conn, card, zone_slug=zone["slug"], usd_rate=usd_rate,
+                                portal="MERCADOLIBRE",
                             )
                             if inserted:
                                 result.items_created += 1

@@ -17,7 +17,8 @@ datasource db {
 
 enum Portal {
   MERCADOLIBRE
-  // Fase 2: ARGENPROP, ZONAPROP, PROPERATI, REMAX
+  ARGENPROP
+  // Fase 2: ZONAPROP, PROPERATI, REMAX
 }
 
 enum OperationType {

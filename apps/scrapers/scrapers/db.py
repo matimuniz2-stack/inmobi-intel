@@ -111,10 +111,13 @@ def upsert_property(
     card: MlListingCard,
     zone_slug: str,
     usd_rate: Decimal | None,
+    portal: str = "MERCADOLIBRE",
 ) -> bool:
-    """Upsert a property. Returns True if inserted (new), False if updated."""
+    """Upsert a property. Returns True if inserted (new), False if updated.
+    `portal` must match a value of the Portal Postgres enum.
+    """
     params = {
-        "portal": "MERCADOLIBRE",
+        "portal": portal,
         "portal_id": card.portal_id,
         "url": card.url,
         "operation_type": card.operation_type,
