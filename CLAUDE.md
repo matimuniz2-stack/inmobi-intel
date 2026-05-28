@@ -161,7 +161,7 @@ Progreso:
 - [x] **M1** — monorepo + docker-compose
 - [x] **M2** — schema Prisma + 52 zonas (MdP region + 48 barrios CABA) resueltas contra ML
 - [x] **M3** — scraper MercadoLibre con Playwright + dolar blue + tests con fixtures
-- [ ] **M4** — frontend Next.js + búsqueda reversa
+- [x] **M4** — frontend Next.js 15 + tRPC + búsqueda reversa con 5 filtros + mobile-first
 - [ ] **M5** — cron diario (GitHub Actions)
 - [ ] **M6** — deploy Supabase + Vercel
 
