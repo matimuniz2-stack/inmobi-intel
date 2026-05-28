@@ -1,0 +1,98 @@
+name: Scrape daily
+
+# Runs the MercadoLibre scraper once a day at 3am ART (= 6am UTC, ART = UTC-3).
+# Can also be triggered manually from the Actions tab with custom zone/op filters.
+#
+# Required secret:
+#   DATABASE_URL  — Postgres connection string (Supabase in production)
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      zone:
+        description: 'Zone slugs (comma-separated) or "all"'
+        required: false
+        default: "mar-del-plata"
+      ops:
+        description: "Operations comma-separated (SALE, RENT)"
+        required: false
+        default: "SALE,RENT"
+      limit:
+        description: "Max pages per (zone, op). Empty = scrape until exhausted."
+        required: false
+        default: ""
+
+concurrency:
+  group: scrape-daily
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    defaults:
+      run:
+        working-directory: apps/scrapers
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Cache Poetry venv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pypoetry/virtualenvs
+          key: poetry-${{ runner.os }}-py3.12-${{ hashFiles('apps/scrapers/poetry.lock') }}
+
+      - name: Install Python deps
+        run: poetry install --no-interaction --no-root
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-chromium-v1
+
+      - name: Install Chromium (with system deps)
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: poetry run playwright install --with-deps chromium
+
+      - name: Run scraper
+        env:
+          ZONE: ${{ github.event.inputs.zone || 'mar-del-plata' }}
+          OPS: ${{ github.event.inputs.ops || 'SALE,RENT' }}
+          LIMIT_ARG: ${{ github.event.inputs.limit && format('--limit {0}', github.event.inputs.limit) || '' }}
+        run: |
+          mkdir -p /tmp/scrape-logs
+          poetry run python -m scrapers.mercadolibre \
+            --zone "$ZONE" \
+            --op "$OPS" \
+            $LIMIT_ARG \
+            2>&1 | tee /tmp/scrape-logs/run.log
+
+      - name: Smoke test (verify ≥1 property touched in this run)
+        if: always()
+        run: poetry run python scripts/smoke_test.py
+
+      - name: Upload run log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scrape-log-${{ github.run_id }}
+          path: /tmp/scrape-logs/run.log
+          retention-days: 14

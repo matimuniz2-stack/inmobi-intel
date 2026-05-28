@@ -99,12 +99,30 @@ pnpm format:check
 - [x] **M2**: schema Prisma + 52 zonas resueltas (MdP region + 48 barrios CABA)
 - [x] **M3**: scraper MercadoLibre con Playwright + cotización USD blue
 - [x] **M4**: frontend Next.js + tRPC + búsqueda reversa funcional
-- [ ] **M5**: cron diario en GitHub Actions
+- [x] **M5**: workflows GitHub Actions (cron diario + CI typecheck/tests)
 - [ ] **M6**: deploy a Supabase + Vercel
 
 Mirá [`CLAUDE.md`](./CLAUDE.md) para el plan completo de fases.
 
 ---
+
+## GitHub Actions
+
+Dos workflows en `.github/workflows/`:
+
+- **`ci.yml`** — corre en cada push/PR. Hace `pnpm install`, `prisma generate`, `pnpm typecheck` + `pytest` del scraper. ~2 min.
+- **`scrape-daily.yml`** — cron a las **3am ART** (6:00 UTC). Levanta Chromium, scrapea MdP venta+alquiler, guarda log como artifact y corre smoke test. También se dispara manualmente desde la pestaña Actions con inputs personalizados (zona, ops, limit).
+
+Para activar el cron hace falta configurar el secret **`DATABASE_URL`** en GitHub Settings → Secrets → Actions (apunta a la DB de Supabase que se crea en M6).
+
+```bash
+# Disparar manualmente desde CLI:
+gh workflow run scrape-daily.yml -f zone=mar-del-plata -f ops=SALE
+
+# Ver el log:
+gh run list --workflow scrape-daily.yml
+gh run view <run-id> --log
+```
 
 ## Convenciones
 

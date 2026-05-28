@@ -1,0 +1,66 @@
+name: CI
+
+# Runs on every push to main and every PR. Catches breakage before deploy.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck:
+    name: TypeScript typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        env:
+          # prisma generate parses DATABASE_URL but does not connect
+          DATABASE_URL: "postgresql://noop:noop@localhost:5432/noop"
+        run: pnpm db:generate
+
+      - name: Typecheck all packages
+        run: pnpm typecheck
+
+  python-tests:
+    name: Python parser tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/scrapers
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pipx install poetry
+
+      - name: Cache Poetry venv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pypoetry/virtualenvs
+          key: poetry-${{ runner.os }}-py3.12-${{ hashFiles('apps/scrapers/poetry.lock') }}
+
+      - run: poetry install --no-interaction --no-root
+
+      - name: Run pytest (parser + zones, no network)
+        run: poetry run pytest -v

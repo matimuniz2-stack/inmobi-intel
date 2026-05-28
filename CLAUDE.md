@@ -162,7 +162,7 @@ Progreso:
 - [x] **M2** — schema Prisma + 52 zonas (MdP region + 48 barrios CABA) resueltas contra ML
 - [x] **M3** — scraper MercadoLibre con Playwright + dolar blue + tests con fixtures
 - [x] **M4** — frontend Next.js 15 + tRPC + búsqueda reversa con 5 filtros + mobile-first
-- [ ] **M5** — cron diario (GitHub Actions)
+- [x] **M5** — workflows GitHub Actions (CI + cron diario 3am ART con smoke test)
 - [ ] **M6** — deploy Supabase + Vercel
 
 Decisiones técnicas tomadas durante Fase 1: ver `docs/decisions/`.
