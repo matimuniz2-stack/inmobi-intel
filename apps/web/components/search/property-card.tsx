@@ -13,6 +13,7 @@ import {
 
 interface PropertyLike {
   id: string;
+  portal: 'MERCADOLIBRE';
   portalId: string;
   url: string;
   operationType: 'SALE' | 'RENT' | 'TEMP_RENT';
@@ -45,6 +46,15 @@ const TYPE_LABEL: Record<PropertyLike['propertyType'], string> = {
   LOCAL: 'Local',
   TERRENO: 'Terreno',
   OTRO: 'Otro',
+};
+
+const PORTAL_LABEL: Record<PropertyLike['portal'], string> = {
+  MERCADOLIBRE: 'MercadoLibre',
+};
+
+// Brand colors per portal — add new portals here as we wire them in Fase 2.
+const PORTAL_BADGE_CLASS: Record<PropertyLike['portal'], string> = {
+  MERCADOLIBRE: 'bg-yellow-300 text-yellow-950 hover:bg-yellow-300 border-yellow-400',
 };
 
 function firstPhoto(photos: unknown): string | null {
@@ -80,6 +90,11 @@ export function PropertyCard({ p }: { p: PropertyLike }) {
           </Badge>
           <Badge variant="secondary" className="bg-white/90 text-foreground">
             {TYPE_LABEL[p.propertyType]}
+          </Badge>
+        </div>
+        <div className="absolute right-2 top-2">
+          <Badge className={PORTAL_BADGE_CLASS[p.portal] ?? ''}>
+            {PORTAL_LABEL[p.portal] ?? p.portal}
           </Badge>
         </div>
       </div>
