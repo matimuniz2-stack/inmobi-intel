@@ -1,7 +1,8 @@
 name: Scrape daily
 
-# Runs the MercadoLibre scraper once a day at 3am ART (= 6am UTC, ART = UTC-3).
-# Can also be triggered manually from the Actions tab with custom zone/op filters.
+# Runs all three portal scrapers (MercadoLibre, Argenprop, ZonaProp) once a day
+# at 3am ART (= 6am UTC, ART = UTC-3).
+# Can also be triggered manually from the Actions tab with custom zone/op/portal filters.
 #
 # Required secret:
 #   DATABASE_URL  — Postgres connection string (Supabase in production)
@@ -23,6 +24,16 @@ on:
         description: "Max pages per (zone, op). Empty = scrape until exhausted."
         required: false
         default: ""
+      portal:
+        description: "Which portal(s) to scrape: all, mercadolibre, argenprop, zonaprop"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - mercadolibre
+          - argenprop
+          - zonaprop
 
 concurrency:
   group: scrape-daily
@@ -40,6 +51,10 @@ jobs:
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       PYTHONUNBUFFERED: "1"
+      ZONE: ${{ github.event.inputs.zone || 'mar-del-plata' }}
+      OPS: ${{ github.event.inputs.ops || 'SALE,RENT' }}
+      LIMIT_ARG: ${{ github.event.inputs.limit && format('--limit {0}', github.event.inputs.limit) || '' }}
+      PORTAL: ${{ github.event.inputs.portal || 'all' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -72,27 +87,53 @@ jobs:
         if: steps.pw-cache.outputs.cache-hit != 'true'
         run: poetry run playwright install --with-deps chromium
 
-      - name: Run scraper
-        env:
-          ZONE: ${{ github.event.inputs.zone || 'mar-del-plata' }}
-          OPS: ${{ github.event.inputs.ops || 'SALE,RENT' }}
-          LIMIT_ARG: ${{ github.event.inputs.limit && format('--limit {0}', github.event.inputs.limit) || '' }}
+      - name: Prepare log dir
+        run: mkdir -p /tmp/scrape-logs
+
+      # Each portal runs as its own step with continue-on-error so a single flaky
+      # portal (ZonaProp is the most WAF-prone) does not abort the others. The
+      # smoke test below is the real gate: if all three scrape nothing, it fails.
+      - name: Run MercadoLibre
+        if: ${{ env.PORTAL == 'all' || env.PORTAL == 'mercadolibre' }}
+        continue-on-error: true
+        timeout-minutes: 60
         run: |
-          mkdir -p /tmp/scrape-logs
           poetry run python -m scrapers.mercadolibre \
             --zone "$ZONE" \
             --op "$OPS" \
             $LIMIT_ARG \
-            2>&1 | tee /tmp/scrape-logs/run.log
+            2>&1 | tee /tmp/scrape-logs/mercadolibre.log
+
+      - name: Run Argenprop
+        if: ${{ env.PORTAL == 'all' || env.PORTAL == 'argenprop' }}
+        continue-on-error: true
+        timeout-minutes: 30
+        run: |
+          poetry run python -m scrapers.argenprop \
+            --zone "$ZONE" \
+            --op "$OPS" \
+            $LIMIT_ARG \
+            2>&1 | tee /tmp/scrape-logs/argenprop.log
+
+      - name: Run ZonaProp
+        if: ${{ env.PORTAL == 'all' || env.PORTAL == 'zonaprop' }}
+        continue-on-error: true
+        timeout-minutes: 45
+        run: |
+          poetry run python -m scrapers.zonaprop \
+            --zone "$ZONE" \
+            --op "$OPS" \
+            $LIMIT_ARG \
+            2>&1 | tee /tmp/scrape-logs/zonaprop.log
 
       - name: Smoke test (verify ≥1 property touched in this run)
         if: always()
         run: poetry run python scripts/smoke_test.py
 
-      - name: Upload run log
+      - name: Upload run logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: scrape-log-${{ github.run_id }}
-          path: /tmp/scrape-logs/run.log
+          path: /tmp/scrape-logs/
           retention-days: 14
