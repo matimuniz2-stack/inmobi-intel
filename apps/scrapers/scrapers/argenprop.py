@@ -11,7 +11,7 @@ from typing import cast
 from playwright.async_api import BrowserContext, Page, async_playwright
 
 from .argenprop_parser import parse_listing_page
-from .base import BaseScraper, ScrapeResult
+from .base import BaseScraper, ScrapeResult, session_exit_code
 from .config import DATABASE_URL, get_zone, load_zones
 from .db import (
     create_scrape_job,
@@ -183,7 +183,8 @@ async def run(
     max_pages: int | None,
     dry_run: bool,
     skip_usd: bool,
-) -> None:
+) -> ScrapeResult:
+    total = ScrapeResult()
     usd_rate: Decimal | None = None
     if not skip_usd:
         try:
@@ -233,6 +234,7 @@ async def run(
                         dry_run=dry_run,
                         prop_types=prop_types,
                     )
+                    total.merge(res)
                     logger.info(
                         "scrape_zone_end",
                         zone=zone["slug"],
@@ -253,6 +255,7 @@ async def run(
                                 items_updated=res.items_updated,
                             )
                 except Exception as e:
+                    total.errors += 1
                     logger.error("scrape_zone_failed", zone=zone["slug"], op=op, error=repr(e))
                     if not dry_run and job_id:
                         with db_conn() as conn:
@@ -268,6 +271,8 @@ async def run(
 
         if ctx.browser is not None:
             await ctx.browser.close()
+
+    return total
 
 
 def main() -> None:
@@ -319,7 +324,7 @@ def main() -> None:
         max_pages=args.limit,
         dry_run=args.dry_run,
     )
-    asyncio.run(
+    summary = asyncio.run(
         run(
             zones,
             operations,
@@ -330,6 +335,7 @@ def main() -> None:
         )
     )
     logger.info("scrape_session_end")
+    sys.exit(session_exit_code(summary, logger=logger))
 
 
 if __name__ == "__main__":

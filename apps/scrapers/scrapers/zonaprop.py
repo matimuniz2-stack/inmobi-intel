@@ -20,7 +20,7 @@ from typing import cast
 from playwright.async_api import BrowserContext, Page, async_playwright
 from playwright_stealth import stealth_async
 
-from .base import BaseScraper, ScrapeResult
+from .base import BaseScraper, ScrapeResult, session_exit_code
 from .config import DATABASE_URL, get_zone, load_zones
 from .db import (
     create_scrape_job,
@@ -208,7 +208,8 @@ async def run(
     skip_usd: bool,
     min_delay: float,
     max_delay: float,
-) -> None:
+) -> ScrapeResult:
+    total = ScrapeResult()
     usd_rate: Decimal | None = None
     if not skip_usd:
         try:
@@ -258,6 +259,7 @@ async def run(
                         min_delay=min_delay,
                         max_delay=max_delay,
                     )
+                    total.merge(res)
                     logger.info(
                         "scrape_zone_end",
                         zone=zone["slug"],
@@ -278,6 +280,7 @@ async def run(
                                 items_updated=res.items_updated,
                             )
                 except Exception as e:
+                    total.errors += 1
                     logger.error("scrape_zone_failed", zone=zone["slug"], op=op, error=repr(e))
                     if not dry_run and job_id:
                         with db_conn() as conn:
@@ -292,6 +295,8 @@ async def run(
                             )
 
         await browser.close()
+
+    return total
 
 
 def main() -> None:
@@ -315,11 +320,11 @@ def main() -> None:
 
     operations = [o.strip().upper() for o in args.op.split(",") if o.strip()]
     if any(o not in OPERATION_SLUG for o in operations):
-        print(f"ERROR: unsupported op", file=sys.stderr)
+        print("ERROR: unsupported op", file=sys.stderr)
         sys.exit(2)
     prop_types = [t.strip().upper() for t in args.type.split(",") if t.strip()]
     if any(t not in PROP_TYPE_SLUG for t in prop_types):
-        print(f"ERROR: unsupported type", file=sys.stderr)
+        print("ERROR: unsupported type", file=sys.stderr)
         sys.exit(2)
 
     zones = asyncio.run(_resolve_zones(args.zone))
@@ -331,7 +336,7 @@ def main() -> None:
         max_pages=args.limit,
         dry_run=args.dry_run,
     )
-    asyncio.run(
+    summary = asyncio.run(
         run(
             zones,
             operations,
@@ -344,6 +349,7 @@ def main() -> None:
         )
     )
     logger.info("scrape_session_end")
+    sys.exit(session_exit_code(summary, logger=logger))
 
 
 if __name__ == "__main__":

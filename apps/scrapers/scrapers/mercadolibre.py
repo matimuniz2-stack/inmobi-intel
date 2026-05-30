@@ -12,7 +12,7 @@ from typing import Literal
 
 from playwright.async_api import BrowserContext, Page, async_playwright
 
-from .base import BaseScraper, ScrapeResult
+from .base import BaseScraper, ScrapeResult, session_exit_code
 from .config import DATABASE_URL, get_zone, load_zones
 from .db import (
     create_scrape_job,
@@ -191,7 +191,8 @@ async def run(
     max_pages: int | None,
     dry_run: bool,
     skip_usd: bool,
-) -> None:
+) -> ScrapeResult:
+    total = ScrapeResult()
     # 1. Refresh USD rate (always — cheap, idempotent within the day).
     usd_rate: Decimal | None = None
     if not skip_usd:
@@ -235,6 +236,7 @@ async def run(
                     res = await scraper.scrape_zone(
                         zone, op, usd_rate=usd_rate, max_pages=max_pages, dry_run=dry_run
                     )
+                    total.merge(res)
                     logger.info(
                         "scrape_zone_end",
                         zone=zone["slug"],
@@ -255,6 +257,7 @@ async def run(
                                 items_updated=res.items_updated,
                             )
                 except Exception as e:
+                    total.errors += 1
                     logger.error("scrape_zone_failed", zone=zone["slug"], op=op, error=repr(e))
                     if not dry_run and job_id:
                         with db_conn() as conn:
@@ -270,6 +273,8 @@ async def run(
 
         if ctx.browser is not None:
             await ctx.browser.close()
+
+    return total
 
 
 def main() -> None:
@@ -326,8 +331,11 @@ def main() -> None:
         max_pages=args.limit,
         dry_run=args.dry_run,
     )
-    asyncio.run(run(zones, operations, max_pages=args.limit, dry_run=args.dry_run, skip_usd=args.skip_usd))
+    summary = asyncio.run(
+        run(zones, operations, max_pages=args.limit, dry_run=args.dry_run, skip_usd=args.skip_usd)
+    )
     logger.info("scrape_session_end")
+    sys.exit(session_exit_code(summary, logger=logger))
 
 
 if __name__ == "__main__":

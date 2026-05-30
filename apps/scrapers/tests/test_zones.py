@@ -5,9 +5,12 @@ from __future__ import annotations
 from scrapers.config import get_zone, load_zones
 
 
-def test_load_zones_returns_all_52():
+def test_load_zones_count_and_unique_slugs():
+    # 89 = MdP region + barrios (grew from the original 52 in 333aa1f, "37 barrios de MdP").
     zones = load_zones()
-    assert len(zones) == 52, f"expected 52 zones, got {len(zones)}"
+    assert len(zones) == 89, f"expected 89 zones, got {len(zones)}"
+    slugs = [z["slug"] for z in zones]
+    assert len(slugs) == len(set(slugs)), "duplicate zone slugs in zones.json"
 
 
 def test_zone_fields_required():
