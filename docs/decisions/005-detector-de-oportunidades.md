@@ -29,10 +29,16 @@ urgencia en el texto. Dos restricciones de datos importantes al arrancar:
   (`opportunity/repository.py`) y el CLP (`opportunity/__main__.py`, `python -m
   opportunity`) quedan separados. Dependencia opportunity → scrapers, nunca al revés.
 - **Cohortes para "bajo precio"**: US$/m² contra la **mediana** (robusta a outliers)
-  de propiedades con la misma (operación, tipo, zona). Mínimo 6 comparables. Dispara
-  entre 8% y 60% debajo; un descuento >60% se descarta como dato malo (cochera mal
-  tipada, terreno como depto, typo). Trabaja en relativo, así sirve igual para venta
-  y alquiler.
+  de comparables del **mismo barrio** (operación, tipo, ciudad, `neighborhood`), no de
+  toda la ciudad. **Solo APT** (casas/terrenos tienen US$/m² muy ruidoso porque el lote
+  pesa más que lo construido). Mínimo 8 comparables. Dispara entre **10% y 30%** debajo;
+  un descuento >30% casi siempre es dato malo o no comparable y no se marca. Excluye
+  barrios catch-all ("Otros Barrios", neighborhood = ciudad).
+  > Esto se ajustó **validando contra datos reales** antes de poblar: cohortear por
+  > ciudad (la versión inicial usaba `zone_slug`, que en MdP es el catch-all
+  > "mar-del-plata") generaba ~1395 oportunidades, muchas falsas (un depto de un barrio
+  > barato marcado "60% bajo la mediana de la ciudad"). Cohortear por barrio + APT +
+  > banda 10-30% lo bajó a ~333 confiables. Principio "data correcta pesimista".
 - **Historial de precios** (tabla `price_history`): el upsert inserta un punto sólo
   cuando el precio se mueve respecto de la última observación. La migración hace un
   backfill idempotente del precio actual (fechado en `first_seen_at`) para que la
@@ -77,6 +83,16 @@ urgencia en el texto. Dos restricciones de datos importantes al arrancar:
 - ⚠️ El umbral "mucho tiempo" mide desde que **nosotros** vimos el aviso, no desde
   su publicación real en el portal. Se podría mejorar capturando la antigüedad del
   aviso si el portal la expone.
-- ⚠️ La migración `20260531120000_opportunity_detector` está escrita pero **falta
-  aplicarla a Supabase** (`prisma migrate deploy`) y correr el scorer una vez. Sin
-  eso, `/oportunidades` muestra la lista vacía.
+- ✅ **Live en prod** (2026-05-31): migración aplicada a Supabase (vía SQL Editor, no
+  `migrate deploy` — el `_prisma_migrations` no la registra, marcar con `migrate resolve
+  --applied` cuando haya creds), página deployada (`vercel --prod`), y **333 oportunidades
+  pobladas**. El scorer Python no se pudo correr (la contraseña de la DB está oculta en
+  Vercel como "Sensitive"; resetearla rompe la app — el dueño lo pausó), así que el
+  bootstrap de oportunidades se hizo con un INSERT SQL que replica la lógica de
+  `signal_low_price`. El código Python ya quedó alineado con esa lógica (cohorte por
+  barrio) para que el scoreo diario, cuando corra, no regrese a la versión ruidosa.
+- ⚠️ **v1 limitado, ser honesto con el dueño**: hoy solo la señal "bajo precio", solo
+  departamentos, solo barrios definidos. US$/m² no captura estado/antigüedad/piso, así
+  que algunas de las 333 son baratas por una razón (no gangas) — el agente filtra con
+  criterio (la razón explica exactamente qué es). Casas/terrenos (otra metodología) y
+  las otras 3 señales (ganan datos con el tiempo) son trabajo futuro.

@@ -10,6 +10,7 @@ from opportunity.scorer import (
     PricePoint,
     PropertyRow,
     build_cohorts,
+    cohort_key,
     score_all,
     score_property,
     signal_low_price,
@@ -34,6 +35,7 @@ def make_row(**kw) -> PropertyRow:
         "total_sqm": Decimal("55"),
         "bedrooms": 2,
         "zone_slug": "playa-grande",
+        "neighborhood": "Centro",
         "city": "Mar del Plata",
         "title": None,
         "description": None,
@@ -71,35 +73,49 @@ def test_usd_per_sqm_none_when_missing():
 
 def test_low_price_fires_with_discount():
     row = make_row(price_usd=Decimal("100000"), covered_sqm=Decimal("50"))  # 2000/m²
-    peers = [2500.0] * 6  # mediana 2500 → 20% debajo
+    peers = [2500.0] * 8  # mediana 2500 → 20% debajo
     sig = signal_low_price(row, peers)
     assert sig is not None
     assert sig.key == "low_price"
     assert sig.points == 30  # round(0.20 * 150)
     assert "20% debajo" in sig.reason
-    assert "Playa Grande" in sig.reason
+    assert "del barrio" in sig.reason
+    assert "Centro" in sig.reason  # nombre del barrio
 
 
 def test_low_price_ignores_small_discount():
     row = make_row(price_usd=Decimal("100000"), covered_sqm=Decimal("50"))  # 2000/m²
-    assert signal_low_price(row, [2100.0] * 6) is None  # ~4.8% debajo, ruido
+    assert signal_low_price(row, [2100.0] * 8) is None  # ~4.8% debajo, ruido
 
 
 def test_low_price_ignores_data_error_discount():
     row = make_row(price_usd=Decimal("100000"), covered_sqm=Decimal("50"))  # 2000/m²
-    # mediana 6000 → 67% debajo: dato malo, no se marca
-    assert signal_low_price(row, [6000.0] * 6) is None
+    # mediana 3200 → 37% debajo: dato malo / no comparable (>30%), no se marca
+    assert signal_low_price(row, [3200.0] * 8) is None
 
 
 def test_low_price_needs_minimum_cohort():
     row = make_row(price_usd=Decimal("100000"), covered_sqm=Decimal("50"))
-    assert signal_low_price(row, [2500.0] * 5) is None  # < MIN_COHORT
+    assert signal_low_price(row, [2500.0] * 7) is None  # < MIN_COHORT (8)
 
 
 def test_low_price_caps_points():
     row = make_row(price_usd=Decimal("100000"), covered_sqm=Decimal("50"))  # 2000/m²
-    sig = signal_low_price(row, [4000.0] * 6)  # 50% debajo
+    sig = signal_low_price(row, [2857.0] * 8)  # ~30% debajo (tope de la banda)
     assert sig is not None and sig.points == 45  # tope
+
+
+def test_low_price_only_apt():
+    # Casas/terrenos no entran a "bajo precio" (US$/m² muy ruidoso por el lote)
+    row = make_row(property_type="HOUSE", price_usd=Decimal("100000"), covered_sqm=Decimal("50"))
+    assert signal_low_price(row, [2500.0] * 8) is None
+
+
+def test_cohort_key_requires_real_neighborhood():
+    assert cohort_key(make_row(neighborhood="Centro")) == ("SALE", "APT", "mar del plata", "centro")
+    assert cohort_key(make_row(neighborhood=None)) is None
+    assert cohort_key(make_row(neighborhood="Otros Barrios")) is None  # catch-all
+    assert cohort_key(make_row(neighborhood="Mar del Plata")) is None  # == ciudad
 
 
 # --- baja reciente ---
@@ -183,7 +199,7 @@ def test_score_property_combines_and_caps():
         first_seen_at=NOW - timedelta(days=200),  # stale 15
     )
     hist = [point(10, "150000"), point(2, "100000")]  # baja 33% → tope 30
-    peers = [4000.0] * 6  # bajo precio 50% → tope 45
+    peers = [2857.0] * 8  # bajo precio ~30% → tope 45
     scored = score_property(row, peers, hist, NOW)
     assert scored is not None
     assert scored.score == MAX_SCORE  # 45+30+15+20 = 110 → capeado a 100
@@ -198,16 +214,16 @@ def test_score_property_none_without_signals():
 
 
 def test_score_all_filters_min_score_and_sorts():
-    # Cohorte de 6 deptos a 2500/m² + 1 candidato barato a 2000/m²
+    # Cohorte (Centro) de 8 deptos a 2500/m² + 1 candidato barato a 2000/m²
     peers = [
         make_row(id=f"peer{i}", price_usd=Decimal("125000"), covered_sqm=Decimal("50"))
-        for i in range(6)
+        for i in range(8)
     ]
     candidate = make_row(id="cand", price_usd=Decimal("100000"), covered_sqm=Decimal("50"))
-    # Un depto con sólo marketing débil ("oportunidad", 4 pts) no llega al mínimo
+    # Un depto en otro barrio (sin cohorte) con sólo marketing débil no llega al mínimo
     weak = make_row(
         id="weak", price_usd=Decimal("125000"), covered_sqm=Decimal("50"),
-        title="Gran oportunidad", zone_slug="otra-zona",
+        title="Gran oportunidad", neighborhood="Sin Comparables",
     )
     rows = [*peers, candidate, weak]
     result = score_all(rows, histories={}, now=NOW)
@@ -218,14 +234,14 @@ def test_score_all_filters_min_score_and_sorts():
     assert all(result[i].score >= result[i + 1].score for i in range(len(result) - 1))
 
 
-def test_build_cohorts_groups_by_op_type_zone():
+def test_build_cohorts_groups_by_op_type_neighborhood():
     rows = [
-        make_row(id="a", zone_slug="z1"),
-        make_row(id="b", zone_slug="z1"),
-        make_row(id="c", zone_slug="z2"),
-        make_row(id="d", operation_type="RENT", zone_slug="z1"),
+        make_row(id="a", neighborhood="Centro"),
+        make_row(id="b", neighborhood="Centro"),
+        make_row(id="c", neighborhood="Güemes"),
+        make_row(id="d", operation_type="RENT", neighborhood="Centro"),
     ]
     cohorts = build_cohorts(rows)
-    assert len(cohorts[("SALE", "APT", "z1")]) == 2
-    assert len(cohorts[("SALE", "APT", "z2")]) == 1
-    assert len(cohorts[("RENT", "APT", "z1")]) == 1
+    assert len(cohorts[("SALE", "APT", "mar del plata", "centro")]) == 2
+    assert len(cohorts[("SALE", "APT", "mar del plata", "güemes")]) == 1
+    assert len(cohorts[("RENT", "APT", "mar del plata", "centro")]) == 1

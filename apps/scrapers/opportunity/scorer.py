@@ -31,12 +31,18 @@ from decimal import Decimal
 
 # --- Tunables (documentados; revisar con uso real) ---
 
-# "Bajo precio": US$/m² contra la mediana de la cohorte (op, tipo, zona)
-MIN_COHORT = 6  # comparables mínimos (excluyendo la propia) para confiar en la mediana
-LOW_PRICE_MIN_DISCOUNT = 0.08  # 8% debajo para disparar
-LOW_PRICE_DATA_ERROR_DISCOUNT = 0.60  # >60% debajo: casi siempre dato malo (cochera/typo)
+# "Bajo precio": US$/m² contra la mediana de la cohorte. La cohorte es por BARRIO
+# (no por ciudad): comparar contra toda la ciudad lumpea barrios caros y baratos y
+# marca gangas falsas (validado con datos reales — ver decisión 005). Solo APT:
+# casas/terrenos tienen US$/m² muy ruidoso porque el lote pesa más que lo construido.
+MIN_COHORT = 8  # comparables mínimos (excluyendo la propia) para confiar en la mediana
+LOW_PRICE_MIN_DISCOUNT = 0.10  # 10% debajo para disparar
+LOW_PRICE_DATA_ERROR_DISCOUNT = 0.30  # >30% debajo: casi siempre dato malo o no comparable
 LOW_PRICE_MAX_POINTS = 45
 LOW_PRICE_POINTS_PER_DISCOUNT = 150  # 30% de descuento → 45 pts (tope)
+
+# Barrios "catch-all" que no son un barrio real: no sirven para cohortear.
+_CATCHALL_NEIGHBORHOODS = {"otros barrios", "otro", "sin especificar"}
 
 # "Baja reciente": comparada sobre US$ normalizado entre observaciones
 DROP_WINDOW_DAYS = 90  # la baja tiene que ser reciente para contar
@@ -72,6 +78,7 @@ class PropertyRow:
     total_sqm: Decimal | None
     bedrooms: int | None
     zone_slug: str | None
+    neighborhood: str | None
     city: str | None
     title: str | None
     description: str | None
@@ -176,14 +183,6 @@ def _join_es(items: list[str]) -> str:
     return f"{', '.join(items[:-1])} y {items[-1]}"
 
 
-def _zone_label(row: PropertyRow) -> str:
-    if row.zone_slug:
-        return row.zone_slug.replace("-", " ").title()
-    if row.city:
-        return row.city
-    return "la zona"
-
-
 def usd_per_sqm(row: PropertyRow) -> float | None:
     """US$/m² usando superficie cubierta (o total como fallback). None si falta dato."""
     sqm = row.covered_sqm if row.covered_sqm is not None else row.total_sqm
@@ -195,19 +194,28 @@ def usd_per_sqm(row: PropertyRow) -> float | None:
     return float(row.price_usd) / sqm_f
 
 
-def cohort_key(row: PropertyRow) -> tuple[str, str, str] | None:
-    """Cohorte de comparación: misma operación, mismo tipo, misma zona (o ciudad)."""
-    geo = row.zone_slug or row.city
-    if not geo:
+def cohort_key(row: PropertyRow) -> tuple[str, str, str, str] | None:
+    """Cohorte de comparación: misma operación, tipo y BARRIO (ciudad + neighborhood).
+
+    None si no hay barrio real (sin neighborhood, catch-all, o == ciudad): sin barrio
+    no hay comparación justa, así que la propiedad no entra al ranking por precio.
+    """
+    barrio = (row.neighborhood or "").strip().lower()
+    if not barrio or barrio in _CATCHALL_NEIGHBORHOODS:
         return None
-    return (row.operation_type, row.property_type, geo)
+    city = (row.city or "").strip().lower()
+    if barrio == city:
+        return None
+    return (row.operation_type, row.property_type, city, barrio)
 
 
 # --- Señales ---
 
 
 def signal_low_price(row: PropertyRow, peers_usd_per_sqm: list[float]) -> Signal | None:
-    """Precio por m² debajo de la mediana de comparables. `peers` excluye la propia."""
+    """Precio por m² debajo de la mediana del barrio. Solo APT (`peers` excluye la propia)."""
+    if row.property_type != "APT":
+        return None
     mine = usd_per_sqm(row)
     if mine is None:
         return None
@@ -225,10 +233,10 @@ def signal_low_price(row: PropertyRow, peers_usd_per_sqm: list[float]) -> Signal
     points = _clamp(round(discount * LOW_PRICE_POINTS_PER_DISCOUNT), 1, LOW_PRICE_MAX_POINTS)
     pct = round(discount * 100)
     reason = (
-        f"Precio {pct}% debajo de la mediana de la zona: "
+        f"Precio {pct}% debajo de la mediana del barrio: "
         f"US$ {_fmt_money(mine)}/m² vs US$ {_fmt_money(median)}/m² en "
         f"{len(peers)} {_TYPE_ES_PLURAL.get(row.property_type, 'propiedades')} en "
-        f"{_OP_ES.get(row.operation_type, '')} comparables de {_zone_label(row)}."
+        f"{_OP_ES.get(row.operation_type, '')} comparables de {row.neighborhood}."
     )
     detail = {
         "discount_pct": pct,
@@ -352,9 +360,11 @@ def score_property(
     )
 
 
-def build_cohorts(rows: list[PropertyRow]) -> dict[tuple[str, str, str], list[tuple[str, float]]]:
-    """Agrupa US$/m² por cohorte. Devuelve key → [(property_id, usd_per_sqm)]."""
-    cohorts: dict[tuple[str, str, str], list[tuple[str, float]]] = {}
+def build_cohorts(
+    rows: list[PropertyRow],
+) -> dict[tuple[str, str, str, str], list[tuple[str, float]]]:
+    """Agrupa US$/m² por cohorte (op, tipo, ciudad, barrio). key → [(property_id, ups)]."""
+    cohorts: dict[tuple[str, str, str, str], list[tuple[str, float]]] = {}
     for row in rows:
         key = cohort_key(row)
         v = usd_per_sqm(row)

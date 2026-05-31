@@ -15,8 +15,8 @@ from .scorer import PricePoint, PropertyRow, ScoredOpportunity
 
 LOAD_ROWS_SQL = """
 SELECT id, operation_type, property_type, price_amount, price_currency,
-       price_usd_normalized, covered_sqm, total_sqm, bedrooms, zone_slug, city,
-       title, description, first_seen_at
+       price_usd_normalized, covered_sqm, total_sqm, bedrooms, zone_slug, neighborhood,
+       city, title, description, first_seen_at
 FROM properties
 WHERE is_active = true
 """
@@ -67,6 +67,7 @@ def load_scoring_rows(conn: psycopg.Connection) -> list[PropertyRow]:
             total_sqm=r["total_sqm"],
             bedrooms=r["bedrooms"],
             zone_slug=r["zone_slug"],
+            neighborhood=r["neighborhood"],
             city=r["city"],
             title=r["title"],
             description=r["description"],
