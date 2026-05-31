@@ -87,6 +87,21 @@ foreach ($p in $portals) {
     if ($code -eq 0) { $anyOk = $true }
 }
 
+# --- Score opportunities over the freshly-scraped data ---
+# Skipped under -DryRun (no DB creds loaded, nothing new written). Idempotent, so
+# re-runs are safe. A scorer failure is logged but doesn't change the task's exit
+# code, which reflects the scrape itself.
+if (-not $DryRun) {
+    "--- opportunity scorer ---" | Tee-Object -FilePath $log -Append
+    & $poetryExe run python -m opportunity 2>&1 | Tee-Object -FilePath $log -Append
+    $scoreCode = $LASTEXITCODE
+    "scorer exit code: $scoreCode" | Tee-Object -FilePath $log -Append
+    if ($scoreCode -ne 0) {
+        "WARN: scorer failed (exit $scoreCode) - opportunities not refreshed." |
+            Tee-Object -FilePath $log -Append
+    }
+}
+
 if ($anyOk) {
     "DONE: at least one portal scraped data." | Tee-Object -FilePath $log -Append
     exit 0

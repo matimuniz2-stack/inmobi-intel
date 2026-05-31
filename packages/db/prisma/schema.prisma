@@ -55,6 +55,7 @@ model Property {
   portal   Portal
   portalId String @map("portal_id")
   url      String
+  title    String?
 
   operationType OperationType @map("operation_type")
   propertyType  PropertyType  @map("property_type")
@@ -95,6 +96,9 @@ model Property {
 
   isActive Boolean @default(true) @map("is_active")
 
+  priceHistory PriceHistory[]
+  opportunity  Opportunity?
+
   @@unique([portal, portalId])
   @@index([operationType, propertyType, neighborhood])
   @@index([zoneSlug, operationType, priceUsdNormalized])
@@ -130,4 +134,43 @@ model UsdRate {
   @@index([recordedAt])
   @@index([source, recordedAt])
   @@map("usd_rates")
+}
+
+// Una fila por cada precio observado de una propiedad. El scraper inserta una
+// nueva fila sólo cuando el precio cambia respecto de la última observación, así
+// el detector de oportunidades puede ver "bajó de X a Y hace N días".
+model PriceHistory {
+  id         String   @id @default(uuid()) @db.Uuid
+  propertyId String   @map("property_id") @db.Uuid
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  priceAmount        Decimal  @map("price_amount") @db.Decimal(14, 2)
+  priceCurrency      Currency @map("price_currency")
+  priceUsdNormalized Decimal? @map("price_usd_normalized") @db.Decimal(14, 2)
+
+  observedAt DateTime @default(now()) @map("observed_at") @db.Timestamptz
+
+  @@index([propertyId, observedAt])
+  @@map("price_history")
+}
+
+// Resultado del scorer: una oportunidad vigente por propiedad (recalculada cada
+// corrida). score 0-100 + reasons (frases en español, principio de explicabilidad)
+// + signals (detalle estructurado por señal, para depurar/auditar el puntaje).
+model Opportunity {
+  id         String   @id @default(uuid()) @db.Uuid
+  propertyId String   @unique @map("property_id") @db.Uuid
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  score   Int
+  reasons String[]
+  signals Json     @default("{}")
+
+  priceUsdAtScore Decimal? @map("price_usd_at_score") @db.Decimal(14, 2)
+
+  computedAt DateTime @default(now()) @map("computed_at") @db.Timestamptz
+
+  @@index([score])
+  @@index([computedAt])
+  @@map("opportunities")
 }

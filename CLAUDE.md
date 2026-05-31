@@ -165,7 +165,11 @@ Progreso:
 - [x] **M5** — workflows GitHub Actions (CI + cron diario 3am ART con smoke test)
 - [x] **M6** — Supabase (proyecto `inmobi-intel`, sa-east-1) + Vercel (https://inmobi-intel.vercel.app), 2047 propiedades populadas
 
-Decisiones técnicas tomadas durante Fase 1: ver `docs/decisions/`.
+**Fase 2 (en curso):**
+- [x] **Multi-portal** — Argenprop + ZonaProp integrados (3 portales scrapeando a Supabase). Scrape confiable corre local desde IP residencial (decisión 004).
+- [x] **Detector de oportunidades** — scorer 0-100 + razones en español (4 señales: bajo precio vs mercado, baja reciente, mucho tiempo publicada, urgencia en texto). Tablas `price_history` + `opportunities`, CLI `python -m opportunity`, página `/oportunidades`. Ver decisión 005. **Pendiente: aplicar la migración `20260531120000_opportunity_detector` a Supabase (`prisma migrate deploy`) + correr el primer scoreo.**
+
+Decisiones técnicas tomadas: ver `docs/decisions/`.
 
 Plan completo en `../plan-app-scraper-inmobiliario.md`. Fases siguientes documentadas ahí.
 
@@ -176,7 +180,7 @@ Plan completo en `../plan-app-scraper-inmobiliario.md`. Fases siguientes documen
 - No agregues frameworks nuevos sin justificación clara.
 - No optimices prematuramente — primero hacelo funcionar, después medilo, después optimizalo.
 - No metas autenticación compleja en Fase 1, alcanza con auth básica de Supabase.
-- No intentes scrapear ZonaProp en Fase 1 — eso es Fase 2 cuando tengamos infra de proxies.
+- ~~No intentes scrapear ZonaProp en Fase 1~~ — ZonaProp ya está integrado (Fase 2). El scrape confiable corre local desde IP residencial; el dueño descartó proxies pagos (decisión 004).
 - No publiques datos scrapeados a terceros ni los uses para nada que no sea uso interno.
 - No te metas a hacer features pedidos por el dueño que no estén en el plan sin avisar primero.
 
@@ -200,4 +204,4 @@ Plan completo en `../plan-app-scraper-inmobiliario.md`. Fases siguientes documen
 
 ---
 
-> **Última actualización**: setup inicial. Actualizá esta nota cuando avancen fases.
+> **Última actualización**: 2026-05-31 — Fase 2: 3 portales + detector de oportunidades (decisión 005). Actualizá esta nota cuando avancen fases.

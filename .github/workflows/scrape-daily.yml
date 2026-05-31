@@ -126,6 +126,14 @@ jobs:
             $LIMIT_ARG \
             2>&1 | tee /tmp/scrape-logs/zonaprop.log
 
+      # The scorer only reads/writes the DB (no portals), so it works even on days
+      # the datacenter IP gets all three scrapers blocked — it re-ranks whatever is
+      # already in Supabase, keeping the "stale" and "price drop" signals fresh.
+      - name: Score opportunities
+        if: always()
+        continue-on-error: true
+        run: poetry run python -m opportunity 2>&1 | tee /tmp/scrape-logs/opportunity.log
+
       - name: Smoke test (verify ≥1 property touched in this run)
         if: always()
         run: poetry run python scripts/smoke_test.py

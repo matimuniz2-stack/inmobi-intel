@@ -1,88 +1,62 @@
 'use client';
 
-import { ChevronLeft, ChevronRight, Flame, Loader2, SlidersHorizontal } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, Search, SlidersHorizontal } from 'lucide-react';
 import Link from 'next/link';
 import * as React from 'react';
 
+import { ZoneCombobox } from '@/components/search/zone-combobox';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { trpc } from '@/lib/trpc/client';
 import { cn } from '@/lib/utils';
 
-import { PropertyCard } from './property-card';
-import { ZoneCombobox } from './zone-combobox';
+import { OpportunityCard } from './opportunity-card';
 
 type Operation = 'SALE' | 'RENT' | 'TEMP_RENT' | '';
 type PropertyType = 'APT' | 'HOUSE' | 'PH' | 'LOCAL' | 'TERRENO' | 'OTRO' | '';
-type Sort = 'recent' | 'price_asc' | 'price_desc';
-
-type BedroomsFilter = '' | '1' | '2' | '3' | '4' | '5plus';
+type MinScore = '' | '35' | '60';
 
 interface Filters {
   zoneSlug: string | null;
   operationType: Operation;
   propertyType: PropertyType;
-  bedrooms: BedroomsFilter;
-  priceUsdMin: string;
-  priceUsdMax: string;
-  sort: Sort;
+  minScore: MinScore;
 }
 
 const PAGE_SIZE = 24;
 
 const DEFAULT_FILTERS: Filters = {
   zoneSlug: null,
-  operationType: 'SALE',
+  operationType: '',
   propertyType: '',
-  bedrooms: '',
-  priceUsdMin: '',
-  priceUsdMax: '',
-  sort: 'recent',
+  minScore: '',
 };
 
 function toQueryInput(f: Filters, offset: number) {
-  const bedrooms: number | '5plus' | undefined =
-    f.bedrooms === ''
-      ? undefined
-      : f.bedrooms === '5plus'
-        ? ('5plus' as const)
-        : Number(f.bedrooms);
   return {
     zoneSlug: f.zoneSlug ?? undefined,
     operationType: f.operationType === '' ? undefined : f.operationType,
     propertyType: f.propertyType === '' ? undefined : f.propertyType,
-    bedrooms,
-    priceUsdMin: f.priceUsdMin ? Number(f.priceUsdMin) : undefined,
-    priceUsdMax: f.priceUsdMax ? Number(f.priceUsdMax) : undefined,
-    sort: f.sort,
+    minScore: f.minScore === '' ? undefined : Number(f.minScore),
     offset,
     limit: PAGE_SIZE,
   };
 }
 
-export function SearchPage() {
+export function OpportunitiesPage() {
   const [filters, setFilters] = React.useState<Filters>(DEFAULT_FILTERS);
   const [page, setPage] = React.useState(0);
   const [filtersOpenMobile, setFiltersOpenMobile] = React.useState(false);
 
   const offset = page * PAGE_SIZE;
-  const query = trpc.properties.search.useQuery(toQueryInput(filters, offset), {
+  const query = trpc.opportunities.list.useQuery(toQueryInput(filters, offset), {
     placeholderData: (prev) => prev,
   });
 
-  // Reset page when filters change
   React.useEffect(() => {
     setPage(0);
-  }, [
-    filters.zoneSlug,
-    filters.operationType,
-    filters.propertyType,
-    filters.bedrooms,
-    filters.priceUsdMin,
-    filters.priceUsdMax,
-  ]);
+  }, [filters.zoneSlug, filters.operationType, filters.propertyType, filters.minScore]);
 
   const updateFilter = <K extends keyof Filters>(k: K, v: Filters[K]) =>
     setFilters((f) => ({ ...f, [k]: v }));
@@ -97,13 +71,13 @@ export function SearchPage() {
         <div className="container flex items-center justify-between py-4">
           <div>
             <h1 className="text-xl font-bold tracking-tight">Inmobi Intel</h1>
-            <p className="text-sm text-muted-foreground">Búsqueda Reversa</p>
+            <p className="text-sm text-muted-foreground">Oportunidades del día</p>
           </div>
           <div className="flex items-center gap-2">
             <Button asChild variant="ghost" size="sm">
-              <Link href="/oportunidades">
-                <Flame className="mr-2 h-4 w-4" />
-                Oportunidades
+              <Link href="/buscar">
+                <Search className="mr-2 h-4 w-4" />
+                Búsqueda
               </Link>
             </Button>
             <Button
@@ -121,17 +95,8 @@ export function SearchPage() {
 
       <main className="container py-4 md:py-6">
         <div className="grid gap-6 md:grid-cols-[280px_1fr]">
-          <aside
-            className={cn(
-              'space-y-4',
-              !filtersOpenMobile && 'hidden md:block',
-            )}
-          >
-            <FiltersPanel
-              filters={filters}
-              updateFilter={updateFilter}
-              onReset={resetFilters}
-            />
+          <aside className={cn('space-y-4', !filtersOpenMobile && 'hidden md:block')}>
+            <FiltersPanel filters={filters} updateFilter={updateFilter} onReset={resetFilters} />
           </aside>
 
           <section className="space-y-4">
@@ -139,38 +104,23 @@ export function SearchPage() {
               <div className="text-sm text-muted-foreground">
                 {query.isPending ? (
                   <span className="inline-flex items-center gap-2">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Buscando...
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Buscando oportunidades...
                   </span>
                 ) : query.data ? (
                   <>
                     <strong className="text-foreground">{query.data.total}</strong>{' '}
-                    {query.data.total === 1 ? 'propiedad' : 'propiedades'}
+                    {query.data.total === 1 ? 'oportunidad' : 'oportunidades'}
                   </>
                 ) : null}
                 {query.isFetching && !query.isPending && (
                   <span className="ml-2 text-xs">· actualizando…</span>
                 )}
               </div>
-              <div className="flex items-center gap-2">
-                <Label htmlFor="sort" className="text-xs text-muted-foreground">
-                  Ordenar por
-                </Label>
-                <select
-                  id="sort"
-                  value={filters.sort}
-                  onChange={(e) => updateFilter('sort', e.target.value as Sort)}
-                  className="h-8 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <option value="recent">Más recientes</option>
-                  <option value="price_asc">Precio: menor a mayor</option>
-                  <option value="price_desc">Precio: mayor a menor</option>
-                </select>
-              </div>
             </div>
 
             {query.isError && (
               <div className="rounded-md border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
-                Error al buscar: {query.error.message}
+                Error al cargar oportunidades: {query.error.message}
               </div>
             )}
 
@@ -181,8 +131,8 @@ export function SearchPage() {
             ) : (
               <>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {query.data?.items.map((p) => (
-                    <PropertyCard key={p.id} p={p} />
+                  {query.data?.items.map((o) => (
+                    <OpportunityCard key={o.id} o={o} />
                   ))}
                 </div>
 
@@ -278,42 +228,17 @@ function FiltersPanel({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="bedrooms">Ambientes</Label>
+        <Label htmlFor="minscore">Fuerza de la oportunidad</Label>
         <select
-          id="bedrooms"
-          value={filters.bedrooms}
-          onChange={(e) => updateFilter('bedrooms', e.target.value as BedroomsFilter)}
+          id="minscore"
+          value={filters.minScore}
+          onChange={(e) => updateFilter('minScore', e.target.value as MinScore)}
           className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <option value="">Cualquiera</option>
-          <option value="1">1 (monoambiente)</option>
-          <option value="2">2</option>
-          <option value="3">3</option>
-          <option value="4">4</option>
-          <option value="5plus">5 o más</option>
+          <option value="">Todas</option>
+          <option value="35">Buenas (score 35+)</option>
+          <option value="60">Fuertes (score 60+)</option>
         </select>
-      </div>
-
-      <div className="space-y-2">
-        <Label>Precio (USD)</Label>
-        <div className="grid grid-cols-2 gap-2">
-          <Input
-            type="number"
-            inputMode="numeric"
-            min={0}
-            value={filters.priceUsdMin}
-            onChange={(e) => updateFilter('priceUsdMin', e.target.value)}
-            placeholder="Min"
-          />
-          <Input
-            type="number"
-            inputMode="numeric"
-            min={0}
-            value={filters.priceUsdMax}
-            onChange={(e) => updateFilter('priceUsdMax', e.target.value)}
-            placeholder="Max"
-          />
-        </div>
       </div>
     </div>
   );
@@ -328,8 +253,7 @@ function ResultsSkeleton() {
           <div className="space-y-2 p-4">
             <Skeleton className="h-5 w-1/2" />
             <Skeleton className="h-4 w-3/4" />
-            <Skeleton className="h-4 w-2/3" />
-            <Skeleton className="h-8 w-full" />
+            <Skeleton className="h-16 w-full" />
           </div>
         </div>
       ))}
@@ -340,9 +264,10 @@ function ResultsSkeleton() {
 function EmptyState() {
   return (
     <div className="flex flex-col items-center gap-2 rounded-lg border bg-card py-12 text-center">
-      <p className="text-sm font-semibold">Sin propiedades que matcheen</p>
-      <p className="text-sm text-muted-foreground">
-        Probá afinar los filtros (ampliar rango de precio, sacar tipo de propiedad).
+      <p className="text-sm font-semibold">Sin oportunidades que matcheen</p>
+      <p className="max-w-md text-sm text-muted-foreground">
+        El detector arma la lista cada mañana sobre la data scrapeada. Probá ampliar la zona o
+        bajar el score mínimo. Si recién pusiste a correr el scraper, esperá al próximo scoreo.
       </p>
     </div>
   );

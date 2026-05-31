@@ -55,7 +55,7 @@ def _normalize_usd(amount: Decimal, currency: str, usd_rate: Decimal | None) -> 
 # (price, currency). last_seen_at is always bumped to now().
 UPSERT_PROPERTY_SQL = """
 INSERT INTO properties (
-    id, portal, portal_id, url,
+    id, portal, portal_id, url, title,
     operation_type, property_type,
     price_amount, price_currency, price_usd_normalized,
     bedrooms, bathrooms, total_sqm, covered_sqm,
@@ -65,7 +65,7 @@ INSERT INTO properties (
     first_seen_at, last_seen_at, last_updated_at,
     is_active
 ) VALUES (
-    gen_random_uuid(), %(portal)s::"Portal", %(portal_id)s, %(url)s,
+    gen_random_uuid(), %(portal)s::"Portal", %(portal_id)s, %(url)s, %(title)s,
     %(operation_type)s::"OperationType", %(property_type)s::"PropertyType",
     %(price_amount)s, %(price_currency)s::"Currency", %(price_usd_normalized)s,
     %(bedrooms)s, %(bathrooms)s, %(total_sqm)s, %(covered_sqm)s,
@@ -77,6 +77,7 @@ INSERT INTO properties (
 )
 ON CONFLICT (portal, portal_id) DO UPDATE SET
     url = EXCLUDED.url,
+    title = EXCLUDED.title,
     operation_type = EXCLUDED.operation_type,
     property_type = EXCLUDED.property_type,
     price_amount = EXCLUDED.price_amount,
@@ -106,6 +107,55 @@ RETURNING (xmax = 0) AS inserted;
 """
 
 
+# Append a price point only when the property's newest price differs from the
+# last one we recorded (or it has no history yet). Keeps re-scrapes at the same
+# price from spamming rows, while capturing every real change — that's the raw
+# material the "recent price drop" opportunity signal reads.
+INSERT_PRICE_POINT_SQL = """
+INSERT INTO price_history (
+    id, property_id, price_amount, price_currency, price_usd_normalized, observed_at
+)
+SELECT gen_random_uuid(), p.id, %(price_amount)s, %(price_currency)s::"Currency",
+       %(price_usd_normalized)s, now()
+FROM properties p
+WHERE p.portal = %(portal)s::"Portal" AND p.portal_id = %(portal_id)s
+  AND NOT EXISTS (
+      SELECT 1 FROM price_history ph
+      WHERE ph.property_id = p.id
+        AND ph.price_amount = %(price_amount)s
+        AND ph.price_currency = %(price_currency)s::"Currency"
+        AND ph.observed_at = (
+            SELECT max(ph2.observed_at) FROM price_history ph2 WHERE ph2.property_id = p.id
+        )
+  );
+"""
+
+
+def record_price_point(
+    conn: psycopg.Connection,
+    *,
+    portal: str,
+    portal_id: str,
+    price_amount: Decimal,
+    price_currency: str,
+    price_usd_normalized: Decimal | None,
+) -> None:
+    """Record a price point for an already-upserted property if the price moved.
+
+    Must run in the same transaction as the upsert so the property row is visible.
+    """
+    conn.execute(
+        INSERT_PRICE_POINT_SQL,
+        {
+            "portal": portal,
+            "portal_id": portal_id,
+            "price_amount": price_amount,
+            "price_currency": price_currency,
+            "price_usd_normalized": price_usd_normalized,
+        },
+    )
+
+
 def upsert_property(
     conn: psycopg.Connection,
     card: MlListingCard,
@@ -115,18 +165,22 @@ def upsert_property(
 ) -> bool:
     """Upsert a property. Returns True if inserted (new), False if updated.
     `portal` must match a value of the Portal Postgres enum.
+
+    Also records a price-history point when the price moved (same transaction).
     """
+    price_usd_normalized = _normalize_usd(
+        card.price_amount, card.price_currency, usd_rate
+    )
     params = {
         "portal": portal,
         "portal_id": card.portal_id,
         "url": card.url,
+        "title": card.title,
         "operation_type": card.operation_type,
         "property_type": card.property_type,
         "price_amount": card.price_amount,
         "price_currency": card.price_currency,
-        "price_usd_normalized": _normalize_usd(
-            card.price_amount, card.price_currency, usd_rate
-        ),
+        "price_usd_normalized": price_usd_normalized,
         "bedrooms": card.bedrooms,
         "bathrooms": card.bathrooms,
         "total_sqm": card.total_sqm,
@@ -141,6 +195,14 @@ def upsert_property(
     }
     cur = conn.execute(UPSERT_PROPERTY_SQL, params)
     row = cur.fetchone()
+    record_price_point(
+        conn,
+        portal=portal,
+        portal_id=card.portal_id,
+        price_amount=card.price_amount,
+        price_currency=card.price_currency,
+        price_usd_normalized=price_usd_normalized,
+    )
     return bool(row[0]) if row else False
 
 
