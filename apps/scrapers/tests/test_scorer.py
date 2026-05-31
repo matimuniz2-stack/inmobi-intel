@@ -11,6 +11,7 @@ from opportunity.scorer import (
     PropertyRow,
     build_cohorts,
     cohort_key,
+    extract_condition,
     score_all,
     score_property,
     signal_low_price,
@@ -116,6 +117,42 @@ def test_cohort_key_requires_real_neighborhood():
     assert cohort_key(make_row(neighborhood=None)) is None
     assert cohort_key(make_row(neighborhood="Otros Barrios")) is None  # catch-all
     assert cohort_key(make_row(neighborhood="Mar del Plata")) is None  # == ciudad
+
+
+# --- estado / antigüedad (Nivel 1) ---
+
+
+def test_extract_condition():
+    c = extract_condition("Depto 2 amb 50 años, 48m2")
+    assert c.antiguedad_years == 50 and not c.a_estrenar and not c.needs_work
+    c2 = extract_condition("Hermoso a estrenar con cochera")
+    assert c2.a_estrenar and c2.antiguedad_years == 0
+    c3 = extract_condition("Oportunidad, a refaccionar")
+    assert c3.needs_work and "a refaccionar" in c3.terms
+    c0 = extract_condition(None)
+    assert c0.antiguedad_years is None and not c0.a_estrenar and not c0.needs_work
+
+
+def test_low_price_excludes_needs_work():
+    # Barato pero "a refaccionar": el precio bajo está explicado, no es ganga
+    row = make_row(
+        price_usd=Decimal("100000"), covered_sqm=Decimal("50"),
+        title="Depto 2 amb a refaccionar",
+    )
+    assert signal_low_price(row, [2500.0] * 8) is None  # 20% debajo pero a refaccionar
+
+
+def test_low_price_adds_condition_context():
+    row = make_row(
+        price_usd=Decimal("100000"), covered_sqm=Decimal("50"), title="Depto a estrenar",
+    )
+    sig = signal_low_price(row, [2500.0] * 8)
+    assert sig is not None and "A estrenar." in sig.reason and sig.detail["a_estrenar"]
+    row2 = make_row(
+        price_usd=Decimal("100000"), covered_sqm=Decimal("50"), title="Depto 50 años",
+    )
+    sig2 = signal_low_price(row2, [2500.0] * 8)
+    assert sig2 is not None and "Antigüedad ~50 años." in sig2.reason
 
 
 # --- baja reciente ---

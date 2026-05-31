@@ -23,6 +23,7 @@ calcula bien; ganan dientes con el tiempo. Ver docs/decisions/005.
 
 from __future__ import annotations
 
+import re
 import statistics
 import unicodedata
 from dataclasses import dataclass, field
@@ -209,6 +210,56 @@ def cohort_key(row: PropertyRow) -> tuple[str, str, str, str] | None:
     return (row.operation_type, row.property_type, city, barrio)
 
 
+# --- Estado / antigüedad (Nivel 1: por qué algo está barato) ---
+# "Barato por m²" no es lo mismo que "oportunidad": un depto puede estar barato
+# porque es viejo / a refaccionar, y entonces está bien de precio para lo que es.
+# Inferimos antigüedad y estado del texto del aviso para (a) NO marcar como ganga lo
+# que está barato por estado, y (b) poner ese contexto en la razón. Hoy lee el título;
+# gana precisión cuando scrapeemos la descripción/detalle (ver decisión 006).
+
+# "A refaccionar" y similares: la baja de precio está explicada por el estado, no es
+# ganga para quien busca entrar a vivir. (pattern normalizado sin acentos, display)
+_NEEDS_WORK_TERMS: list[tuple[str, str]] = [
+    ("a refaccionar", "a refaccionar"),
+    ("para refaccionar", "a refaccionar"),
+    ("a reciclar", "a reciclar"),
+    ("para reciclar", "a reciclar"),
+    ("a reformar", "a reformar"),
+    ("a demoler", "a demoler"),
+    ("apto demolicion", "apto demolición"),
+    ("a reparar", "a reparar"),
+]
+
+
+@dataclass(frozen=True)
+class Condition:
+    antiguedad_years: int | None = None
+    a_estrenar: bool = False
+    needs_work: bool = False
+    terms: list[str] = field(default_factory=list)
+
+
+def extract_condition(text: str | None) -> Condition:
+    """Antigüedad/estado inferidos del texto del aviso (título y/o descripción)."""
+    if not text:
+        return Condition()
+    t = _normalize_text(text)
+    a_estrenar = "estrenar" in t  # "a estrenar", "sin estrenar", "nuevo a estrenar"
+    years: int | None = 0 if a_estrenar else None
+    if years is None:
+        # "50 años" → normalizado "50 anos" (la ñ pierde el acento al normalizar)
+        m = re.search(r"(\d{1,3})\s*anos\b", t)
+        if m and 0 < int(m.group(1)) <= 120:
+            years = int(m.group(1))
+    terms: list[str] = []
+    for pat, disp in _NEEDS_WORK_TERMS:
+        if pat in t and disp not in terms:
+            terms.append(disp)
+    return Condition(
+        antiguedad_years=years, a_estrenar=a_estrenar, needs_work=bool(terms), terms=terms
+    )
+
+
 # --- Señales ---
 
 
@@ -230,6 +281,11 @@ def signal_low_price(row: PropertyRow, peers_usd_per_sqm: list[float]) -> Signal
     # mal tipada, terreno como depto, typo de precio). En ambos extremos, no marca.
     if discount < LOW_PRICE_MIN_DISCOUNT or discount > LOW_PRICE_DATA_ERROR_DISCOUNT:
         return None
+    # ¿Por qué está barato? Si el aviso dice "a refaccionar/reciclar/demoler", la baja
+    # está explicada por el estado: no es ganga para entrar a vivir, no la marcamos.
+    cond = extract_condition(" ".join(t for t in (row.title, row.description) if t))
+    if cond.needs_work:
+        return None
     points = _clamp(round(discount * LOW_PRICE_POINTS_PER_DISCOUNT), 1, LOW_PRICE_MAX_POINTS)
     pct = round(discount * 100)
     reason = (
@@ -238,11 +294,19 @@ def signal_low_price(row: PropertyRow, peers_usd_per_sqm: list[float]) -> Signal
         f"{len(peers)} {_TYPE_ES_PLURAL.get(row.property_type, 'propiedades')} en "
         f"{_OP_ES.get(row.operation_type, '')} comparables de {row.neighborhood}."
     )
+    # Contexto de estado para que el agente juzgue (barato Y nuevo = mejor señal;
+    # barato y viejo = parte del descuento puede ser la edad).
+    if cond.a_estrenar:
+        reason += " A estrenar."
+    elif cond.antiguedad_years is not None:
+        reason += f" Antigüedad ~{cond.antiguedad_years} años."
     detail = {
         "discount_pct": pct,
         "usd_per_sqm": round(mine, 2),
         "median_usd_per_sqm": round(median, 2),
         "cohort_size": len(peers),
+        "antiguedad_years": cond.antiguedad_years,
+        "a_estrenar": cond.a_estrenar,
     }
     return Signal("low_price", points, reason, detail)
 
