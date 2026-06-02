@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from scrapers.zonaprop_parser import (
+    _maybe_temp_rent,
     _parse_decimal_es,
     _parse_features,
     _parse_price,
@@ -18,6 +19,13 @@ from scrapers.zonaprop_parser import (
 
 FIXTURES = Path(__file__).parent / "fixtures"
 SAMPLE_HTML = FIXTURES / "zonaprop_mdp_dpto_venta.html"
+
+
+def test_maybe_temp_rent():
+    assert _maybe_temp_rent("RENT", "Alquiler temporada verano", "") == "TEMP_RENT"
+    assert _maybe_temp_rent("RENT", "Depto", "/alquiler-temporal-centro--1.html") == "TEMP_RENT"
+    assert _maybe_temp_rent("RENT", "Alquiler permanente 3 amb", "") == "RENT"
+    assert _maybe_temp_rent("SALE", "Venta contemporánea", "") == "SALE"
 
 
 def test_parse_price():

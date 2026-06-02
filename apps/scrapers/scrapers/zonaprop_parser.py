@@ -23,6 +23,18 @@ def _norm(s: str | None) -> str:
     return "".join(c for c in nfd if unicodedata.category(c) != "Mn").lower().strip()
 
 
+# Un alquiler temporario es otro mercado (enorme en MdP de verano). El scraper pasa
+# RENT fijo; lo refinamos a TEMP_RENT si el texto/URL lo delata. \b evita "contemporáneo".
+_TEMP_RENT_RE = re.compile(r"\btempora")
+
+
+def _maybe_temp_rent(operation_type: Operation, *texts: str | None) -> Operation:
+    if operation_type != "RENT":
+        return operation_type
+    blob = _norm(" ".join(t for t in texts if t))
+    return "TEMP_RENT" if _TEMP_RENT_RE.search(blob) else operation_type
+
+
 def _parse_decimal_es(num_str: str | None) -> Decimal | None:
     s = (num_str or "").strip()
     if not s:
@@ -162,7 +174,7 @@ def parse_listing_card(
         portal_id=str(portal_id),
         url=url,
         title=title,
-        operation_type=operation_type,
+        operation_type=_maybe_temp_rent(operation_type, title, url),
         property_type=property_type,
         price_amount=price_amount,
         price_currency=cast(Currency, price_currency),
