@@ -76,11 +76,23 @@ $ErrorActionPreference = "Continue"
 $extraArgs = @()
 if ($DryRun) { $extraArgs = @("--dry-run", "--limit", "1", "--skip-usd") }
 
+# Property types to scrape. ML returns every type in its generic inmuebles listing
+# (the parser infers each card's type), so it needs no --type. Argenprop and ZonaProp
+# default to departamentos only — without --type, houses/PH/locals/land are 0% of
+# their data, which is the single biggest coverage gap (see megaplan T3).
+$ALL_TYPES = "APT,HOUSE,PH,LOCAL,TERRENO"
+$portalArgs = @{
+    "mercadolibre" = @()                      # type inferred per card from the listing
+    "argenprop"    = @("--type", $ALL_TYPES)
+    "zonaprop"     = @("--type", $ALL_TYPES)
+}
+
 $portals = @("mercadolibre", "argenprop", "zonaprop")
 $anyOk = $false
 foreach ($p in $portals) {
     "--- $p ---" | Tee-Object -FilePath $log -Append
-    & $poetryExe run python -m "scrapers.$p" --zone "mar-del-plata" --op "SALE,RENT" @extraArgs 2>&1 |
+    $typeArgs = $portalArgs[$p]
+    & $poetryExe run python -m "scrapers.$p" --zone "mar-del-plata" --op "SALE,RENT" @typeArgs @extraArgs 2>&1 |
         Tee-Object -FilePath $log -Append
     $code = $LASTEXITCODE
     "$p exit code: $code" | Tee-Object -FilePath $log -Append
