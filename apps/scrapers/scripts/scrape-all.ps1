@@ -114,6 +114,26 @@ if (-not $DryRun) {
     }
 }
 
+# --- Rotate old logs (this runs daily; logs/ would grow without bound) ---
+Get-ChildItem -Path $logDir -Filter "scrape-*.log" -ErrorAction SilentlyContinue |
+    Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-30) } |
+    Remove-Item -Force -ErrorAction SilentlyContinue
+
+# --- Heartbeat ping (so a silent overnight failure becomes visible) ---
+# Set SCRAPE_HEARTBEAT_URL to a healthchecks.io (or Better Stack) check URL. On
+# success we ping the URL; on failure we ping "<url>/fail". If unset, we skip
+# silently — the ping is opt-in and the URL is the owner's to provision (D4).
+$heartbeat = $env:SCRAPE_HEARTBEAT_URL
+if ($heartbeat) {
+    $pingUrl = if ($anyOk) { $heartbeat } else { ($heartbeat.TrimEnd('/') + "/fail") }
+    try {
+        Invoke-RestMethod -Uri $pingUrl -Method Get -TimeoutSec 15 | Out-Null
+        "heartbeat pinged: $pingUrl" | Tee-Object -FilePath $log -Append
+    } catch {
+        "WARN: heartbeat ping failed: $($_.Exception.Message)" | Tee-Object -FilePath $log -Append
+    }
+}
+
 if ($anyOk) {
     "DONE: at least one portal scraped data." | Tee-Object -FilePath $log -Append
     exit 0
