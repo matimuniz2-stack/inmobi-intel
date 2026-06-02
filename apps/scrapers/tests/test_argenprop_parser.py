@@ -8,11 +8,22 @@ from pathlib import Path
 import pytest
 
 from scrapers.argenprop_parser import (
+    _maybe_temp_rent,
     _neighborhood_from_url,
     _parse_decimal_es,
     parse_listing_card,
     parse_listing_page,
 )
+
+
+def test_maybe_temp_rent():
+    # Refina RENT → TEMP_RENT cuando el texto/URL delata temporario
+    assert _maybe_temp_rent("RENT", "Alquiler temporario en Playa Grande", "") == "TEMP_RENT"
+    assert _maybe_temp_rent("RENT", "Depto", "/depto-alquiler-temporal-mdp--1") == "TEMP_RENT"
+    assert _maybe_temp_rent("RENT", "Alquiler anual 2 amb", "") == "RENT"
+    # No toca SALE ni se confunde con "contemporáneo"
+    assert _maybe_temp_rent("SALE", "Diseño contemporáneo", "") == "SALE"
+    assert _maybe_temp_rent("RENT", "Estilo contemporáneo", "") == "RENT"
 
 FIXTURES = Path(__file__).parent / "fixtures"
 SAMPLE_HTML = FIXTURES / "argenprop_mdp_dpto_venta.html"
@@ -60,6 +71,22 @@ def test_real_page_attributes_parse():
     with_sqm = [c for c in cards if c.covered_sqm is not None or c.total_sqm is not None]
     assert len(with_bedrooms) >= len(cards) * 0.7
     assert len(with_sqm) >= len(cards) * 0.6
+
+
+@pytest.mark.skipif(not SAMPLE_HTML.exists(), reason="fixture not captured")
+def test_real_page_extracts_agency():
+    # Identificar la inmobiliaria es el nucleo de la busqueda reversa. Antes era
+    # siempre None en Argenprop; ahora sale del alt del logo en .card__agent.
+    html = SAMPLE_HTML.read_text(encoding="utf-8")
+    cards = parse_listing_page(html, operation_type="SALE", property_type="APT")
+    with_agency = [c for c in cards if c.agency_name]
+    assert len(with_agency) >= len(cards) * 0.7, (
+        f"solo {len(with_agency)}/{len(cards)} cards con inmobiliaria"
+    )
+    # nombres reales, no vacios ni placeholders
+    assert any("inmobiliaria" in (c.agency_name or "").lower()
+               or "propiedades" in (c.agency_name or "").lower()
+               for c in with_agency)
 
 
 @pytest.mark.skipif(not SAMPLE_HTML.exists(), reason="fixture not captured")

@@ -37,3 +37,21 @@ Observación clave: el mismo scraper, corrido desde la **IP residencial** de la 
 - ⚠️ Depende de que la PC del dueño se prenda al menos una vez al día. Mitigado con `StartWhenAvailable` (corre al próximo boot si se saltó).
 - ⚠️ Setup manual una vez: crear `.env.production.local` con el string de Supabase + correr `register-scrape-task.ps1`. Documentado en el `.env.production.local.example`.
 - ⚠️ Específico de Windows (Task Scheduler). Si se migra a otra máquina/SO, hay que rehacer la tarea (el runner en sí es portable salvo la parte de scheduling).
+- ⚠️ **SPOF físico**: toda la pipeline confiable depende de UNA PC Windows personal. Si esa máquina muere, el ingest se corta hasta rehacer el setup en otra (runbook abajo). El heartbeat (ver más abajo) convierte "PC apagada/muerta" de invisible a notificado.
+
+## Runbook — re-setup del ingest en una máquina nueva (~5 min)
+
+Si hay que rehacer la pipeline en otra PC Windows (o tras un reinstalar):
+
+1. **Clonar el repo** y, desde `apps/scrapers/`, instalar deps: `poetry install` y luego `poetry run playwright install chromium`.
+2. **Crear `apps/scrapers/.env.production.local`** (gitignored) con una sola línea:
+   ```
+   DATABASE_URL=postgresql://...supabase... (session pooler, puerto 5432)
+   ```
+   El string está en el dashboard de Supabase del proyecto **inmobi-intel** (ref `fsrdscqnyufkfxkjfuun`) → Connect. Ver `.env.production.local.example`.
+3. **Probar el pipeline sin escribir**: `pwsh apps/scrapers/scripts/scrape-all.ps1 -DryRun`. Debe traer >0 de al menos un portal desde la IP residencial.
+4. **(Opcional) Heartbeat**: setear la variable de entorno `SCRAPE_HEARTBEAT_URL` (de healthchecks.io o Better Stack) a nivel usuario, para que un fallo nocturno notifique. Sin ella, el scrape corre igual pero un fallo queda silencioso.
+5. **Registrar la tarea diaria**: `pwsh apps/scrapers/scripts/register-scrape-task.ps1` (decidir la hora — ver D2 del mega-plan; default 09:00 local).
+6. **Verificar**: `Get-ScheduledTaskInfo -TaskName 'InmobiIntel-ScrapeDaily'` debe reportar `LastTaskResult` y `NextRunTime`.
+
+El cron de GitHub Actions queda como red de seguridad gratuita los días que la IP de datacenter no esté bloqueada.

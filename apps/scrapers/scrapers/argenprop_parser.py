@@ -27,6 +27,19 @@ def _norm(s: str | None) -> str:
     return "".join(c for c in nfd if unicodedata.category(c) != "Mn").lower().strip()
 
 
+# "temporal", "temporario/a", "temporada" — un alquiler temporario es un mercado de
+# magnitud distinta al permanente (enorme en MdP de verano). El scraper pasa RENT fijo;
+# acá lo refinamos a TEMP_RENT si el texto/URL lo delata. \b evita "contemporáneo".
+_TEMP_RENT_RE = re.compile(r"\btempora")
+
+
+def _maybe_temp_rent(operation_type: Operation, *texts: str | None) -> Operation:
+    if operation_type != "RENT":
+        return operation_type
+    blob = _norm(" ".join(t for t in texts if t))
+    return "TEMP_RENT" if _TEMP_RENT_RE.search(blob) else operation_type
+
+
 def _parse_decimal_es(num_str: str | None) -> Decimal | None:
     s = (num_str or "").strip()
     if not s:
@@ -158,11 +171,17 @@ def parse_listing_card(
         photo = sel.css(".card__photos img::attr(data-src)").get() or photo
     photos = [photo] if photo and photo.startswith("http") else []
 
+    # Agency: the publisher logo's alt text carries the inmobiliaria name
+    # ("Ruger Negocios Inmobiliarios", "Vidigh Propiedades", ...). Identifying who
+    # holds each listing is the core of the reverse search — before this it was
+    # always None for Argenprop.
+    agency = (sel.css(".card__agent img::attr(alt)").get() or "").strip() or None
+
     return MlListingCard(
         portal_id=str(portal_id),
         url=url,
         title=title,
-        operation_type=operation_type,
+        operation_type=_maybe_temp_rent(operation_type, title, url),
         property_type=property_type,
         price_amount=price_amount,
         price_currency=cast(Currency, currency),
@@ -171,7 +190,7 @@ def parse_listing_card(
         city=None,
         province=None,
         photos=photos,
-        agency_name=None,
+        agency_name=agency,
         **attrs,
     )
 

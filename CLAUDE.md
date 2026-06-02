@@ -167,7 +167,28 @@ Progreso:
 
 **Fase 2 (en curso):**
 - [x] **Multi-portal** — Argenprop + ZonaProp integrados (3 portales scrapeando a Supabase). Scrape confiable corre local desde IP residencial (decisión 004).
-- [x] **Detector de oportunidades** — scorer 0-100 + razones en español (4 señales: bajo precio vs mercado, baja reciente, mucho tiempo publicada, urgencia en texto). Tablas `price_history` + `opportunities`, CLI `python -m opportunity`, página `/oportunidades`. Ver decisión 005. **Pendiente: aplicar la migración `20260531120000_opportunity_detector` a Supabase (`prisma migrate deploy`) + correr el primer scoreo.**
+- [x] **Detector de oportunidades** — scorer 0-100 + razones en español (4 señales: bajo precio vs mercado, baja reciente, mucho tiempo publicada, urgencia en texto). Tablas `price_history` + `opportunities`, CLI `python -m opportunity`, página `/oportunidades`. Ver decisión 005. Migración aplicada a Supabase y primer scoreo corrido (2026-05-31, 404 oportunidades al 2026-06-01).
+
+### Auditoría + mega-plan nocturno (2026-06-01)
+
+Auditoría completa (14 agentes) + mesa de planes → `docs/plans/overnight-2026-06-01-megaplan.md` (32 tareas, T1–T32). **Estrategia ganadora para cobertura completa de MdP**: partición barrio×operación×tipo corrida lento de noche desde la IP residencial (USD 0, respeta decisión 004), NO proxies. Trabajo de la noche en rama `overnight/cobertura-calidad-2026-06-01`:
+
+- [x] **T3** — `scrape-all.ps1` pasa `--type APT,HOUSE,PH,LOCAL,TERRENO` a Argenprop/ZonaProp (antes solo deptos; casas/PH/terrenos = 0%). ML ya trae todos los tipos.
+- [x] **T6** — retry/backoff (`base.fetch_with_retry`): un fallo transitorio ya no aborta la zona entera.
+- [x] **T9** — `TEMP_RENT` derivado del título/URL en Argenprop/ZonaProp (antes un temporario quedaba como RENT permanente).
+- [x] **T12** — Argenprop ahora extrae la inmobiliaria (`.card__agent img@alt`); antes era siempre `None`.
+- [x] **T17/T18/T19** — scorer realineado a la spec: +6 términos de urgencia (incl. "sucesión"); baja de precio exige caída nominal (no falsa baja por suba del dólar en ARS); US$/m² solo sobre superficie cubierta; "a refaccionar" con haircut en vez de supresión (decisión 006). 32 tests del scorer.
+- [x] **T25/T27** — heartbeat de alerta opcional (`SCRAPE_HEARTBEAT_URL`) + rotación de logs en `scrape-all.ps1`.
+- [x] **T28/T31** — runbook de re-setup del ingest (decisión 004) + diferimientos conscientes (decisión 007).
+
+**Limitaciones conocidas (no asumir feature completa):**
+- Cobertura real de MdP todavía baja hasta correr la partición barrio×op×tipo en vivo (T1/T4/T5 necesitan validar slugs contra los portales; falta `argenpropSlug`/`zonapropSlug` en `zones.json`).
+- Columnas del schema aún sin poblar: `description`, `expenses`, `amenities`, `lat/lng`, `agency_phone/email/url` (T10/T11 — el UPSERT no las escribe).
+- **Sin dedup cross-portal** (T15) ni `is_active=false` en avisos caídos (T14): la misma prop puede aparecer N veces y avisos vendidos figuran vigentes. T13 (separar ambientes/dormitorios), T14, T15 necesitan una DB para aplicar/validar migraciones → próxima sesión.
+- App sin auth real (T22): data pública en Vercel.
+- `stale` usa `first_seen_at` (no fecha real de publicación) → casi no dispara hasta acumular historia.
+
+**Decisiones humanas pendientes** (no las puede tomar Claude solo, ver mega-plan §"NEEDS HUMAN DECISION"): revisitar o no decisión 004 (proxies) tras medir cobertura real; migrar ML a API oficial OAuth; cadencia + registrar la Scheduled Task (T29); servicio de heartbeat (D4); deploy a prod + primer scrape masivo nocturno.
 
 Decisiones técnicas tomadas: ver `docs/decisions/`.
 
@@ -204,4 +225,4 @@ Plan completo en `../plan-app-scraper-inmobiliario.md`. Fases siguientes documen
 
 ---
 
-> **Última actualización**: 2026-05-31 — Fase 2: 3 portales + detector de oportunidades (decisión 005). Actualizá esta nota cuando avancen fases.
+> **Última actualización**: 2026-06-01 — Auditoría + mega-plan nocturno (`docs/plans/overnight-2026-06-01-megaplan.md`); rama `overnight/cobertura-calidad-2026-06-01` con T3/T6/T9/T12/T17-19/T25/T27/T28/T31 hechos (decisiones 006, 007). Actualizá esta nota cuando avancen fases.

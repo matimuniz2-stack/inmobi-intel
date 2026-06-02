@@ -21,6 +21,20 @@ for env_path in (SCRAPERS_ROOT / ".env", PROJECT_ROOT / ".env"):
 
 DATABASE_URL: str = os.environ.get("DATABASE_URL", "")
 
+# MercadoLibre official API (OAuth). Empty until the app is registered at
+# developers.mercadolibre.com — see docs/decisions/008-mercadolibre-api-oficial.md.
+# When these are set, the API source can replace the Playwright HTML scraper for ML
+# (mata el RENT=0, trae geo + fecha de publicación + agencia limpias).
+ML_APP_ID: str = os.environ.get("ML_APP_ID", "")
+ML_SECRET: str = os.environ.get("ML_SECRET", "")
+ML_REFRESH_TOKEN: str = os.environ.get("ML_REFRESH_TOKEN", "")
+
+
+def ml_api_configured() -> bool:
+    """True if the ML official-API credentials are present (the source can run)."""
+    return bool(ML_APP_ID and ML_SECRET and ML_REFRESH_TOKEN)
+
+
 ZONES_FILE: Path = PROJECT_ROOT / "packages" / "shared-types" / "src" / "data" / "zones.json"
 
 

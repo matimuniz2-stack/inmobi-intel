@@ -61,3 +61,13 @@ ranking. El scrape de detalle del Nivel 1 además trae más fotos para esto.
   del próximo scrape; o el scrape de detalle). No cambia las ~338 actuales hasta entonces.
 - ⚠️ El Nivel 1 "completo" (datos de detalle) y el Nivel 2 (visión) son trabajo de scraping
   e IA todavía por hacer. El detector seguirá necesitando criterio humano sobre el candidato.
+
+## Actualización 2026-06-01 — "a refaccionar": haircut en vez de exclusión
+
+Revisado en el mega-plan nocturno (T19 / D5). Antes, "a refaccionar" **suprimía** del todo
+la señal de bajo precio. Cambio: ahora **no se suprime** — se le aplica un *haircut* (mitad
+de puntos, `NEEDS_WORK_HAIRCUT = 0.5`) y la razón lo aclara ("parte del precio bajo se
+explica por el estado"). Motivo: un depto 20% bajo mediana a refaccionar **sigue siendo
+negocio** para un inversor/flip; suprimirlo le esconde oportunidades reales al agente. El
+default por entrar-a-vivir lo da el contexto en la razón, no la supresión. **D5 resuelta: el
+dueño confirmó el haircut el 2026-06-01.** Ver `signal_low_price` en `scorer.py`.
