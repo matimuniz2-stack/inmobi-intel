@@ -46,7 +46,13 @@ def make_row(**kw) -> PropertyRow:
     return PropertyRow(**base)
 
 
-def point(days_ago: int, usd: str | None, amount: str = "100000", cur: str = "USD") -> PricePoint:
+def point(
+    days_ago: int, usd: str | None, amount: str | None = None, cur: str = "USD"
+) -> PricePoint:
+    # En un aviso en USD el monto nominal == el US$ normalizado; por defecto los
+    # alineamos para que los fixtures reflejen la realidad (la baja se mide en nominal).
+    if amount is None:
+        amount = usd if usd is not None else "0"
     return PricePoint(
         price_amount=Decimal(amount),
         price_currency=cur,
@@ -133,13 +139,32 @@ def test_extract_condition():
     assert c0.antiguedad_years is None and not c0.a_estrenar and not c0.needs_work
 
 
-def test_low_price_excludes_needs_work():
-    # Barato pero "a refaccionar": el precio bajo está explicado, no es ganga
+def test_extract_condition_ignores_warranty_years():
+    # "3 años de garantía" / "10 años de financiación" NO son antigüedad
+    assert extract_condition("Cocina nueva, 3 años de garantía").antiguedad_years is None
+    assert extract_condition("10 años de financiación directa").antiguedad_years is None
+    # pero "antigüedad 30 años" sí
+    assert extract_condition("Antigüedad 30 años, muy cuidado").antiguedad_years == 30
+
+
+def test_low_price_needs_work_gets_haircut_not_suppressed():
+    # Barato y "a refaccionar": sigue siendo negocio (inversor/flip) pero con menos
+    # puntos y la razón lo aclara. Decisión 006 / opción A del megaplan.
     row = make_row(
         price_usd=Decimal("100000"), covered_sqm=Decimal("50"),
         title="Depto 2 amb a refaccionar",
     )
-    assert signal_low_price(row, [2500.0] * 8) is None  # 20% debajo pero a refaccionar
+    sig = signal_low_price(row, [2500.0] * 8)  # 20% debajo
+    assert sig is not None
+    assert sig.points == 15  # round(30 * 0.5) — mitad del puntaje pleno
+    assert "a refaccionar" in sig.reason and "estado" in sig.reason
+    assert sig.detail["needs_work"] is True
+
+
+def test_low_price_requires_covered_sqm():
+    # Sin superficie cubierta no entra al cálculo de bajo precio (US$/m² no homogéneo)
+    row = make_row(price_usd=Decimal("100000"), covered_sqm=None, total_sqm=Decimal("80"))
+    assert signal_low_price(row, [2500.0] * 8) is None
 
 
 def test_low_price_adds_condition_context():
@@ -187,6 +212,42 @@ def test_price_drop_needs_two_usd_points():
     assert signal_price_drop(row, [point(10, "100000"), point(3, "100000")], NOW) is None
 
 
+def test_price_drop_ignores_ars_dollar_artifact():
+    # Aviso en ARS, monto nominal IGUAL, pero el dólar subió → el US$ "bajó".
+    # No es una baja real (el dueño no tocó el precio): no debe marcar.
+    row = make_row()
+    hist = [
+        point(10, "50000", amount="50000000", cur="ARS"),  # 50M ARS ≈ US$50k
+        point(2, "45000", amount="50000000", cur="ARS"),   # mismo nominal, US$ bajó
+    ]
+    assert signal_price_drop(row, hist, NOW) is None
+
+
+def test_price_drop_real_ars_nominal_drop_fires():
+    row = make_row()
+    hist = [
+        point(10, "60000", amount="60000000", cur="ARS"),
+        point(2, "50000", amount="50000000", cur="ARS"),  # bajó 10M nominal
+    ]
+    sig = signal_price_drop(row, hist, NOW)
+    assert sig is not None
+    assert sig.reason.startswith("Bajó de $")  # moneda del aviso (ARS), no US$
+    assert sig.detail["currency"] == "ARS" and not sig.detail["cross_currency"]
+
+
+def test_price_drop_cross_currency_falls_back_to_usd():
+    # El aviso cambió de ARS a USD entre observaciones → comparar en US$, aclarándolo.
+    row = make_row()
+    hist = [
+        point(10, "50000", amount="50000000", cur="ARS"),
+        point(2, "45000", amount="45000", cur="USD"),
+    ]
+    sig = signal_price_drop(row, hist, NOW)
+    assert sig is not None
+    assert "estimado en US$" in sig.reason
+    assert sig.detail["cross_currency"] is True
+
+
 # --- mucho tiempo publicada ---
 
 
@@ -221,6 +282,13 @@ def test_urgency_handles_accents_and_reads_description():
     assert sig is not None
     assert "permuta" in sig.detail["terms"]
     assert "trato directo" in sig.detail["terms"]
+
+
+def test_urgency_detects_sucesion():
+    # El ejemplo canónico del plan ("sucesión urgente") antes no detectaba "sucesión"
+    sig = signal_urgency(make_row(title="Sucesión, escucho ofertas"))
+    assert sig is not None
+    assert "sucesión" in sig.detail["terms"]
 
 
 def test_urgency_none_without_text():

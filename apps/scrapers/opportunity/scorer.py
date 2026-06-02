@@ -41,6 +41,11 @@ LOW_PRICE_MIN_DISCOUNT = 0.10  # 10% debajo para disparar
 LOW_PRICE_DATA_ERROR_DISCOUNT = 0.30  # >30% debajo: casi siempre dato malo o no comparable
 LOW_PRICE_MAX_POINTS = 45
 LOW_PRICE_POINTS_PER_DISCOUNT = 150  # 30% de descuento → 45 pts (tope)
+# "A refaccionar/reciclar/demoler": el precio bajo se explica EN PARTE por el estado.
+# No la suprimimos (un depto barato a refaccionar sigue siendo negocio para un
+# inversor/flip) pero le bajamos los puntos y lo decimos en la razón. Decisión de
+# producto por defecto (opción A del megaplan/D5); el dueño puede pedir suprimir.
+NEEDS_WORK_HAIRCUT = 0.5
 
 # Barrios "catch-all" que no son un barrio real: no sirven para cohortear.
 _CATCHALL_NEIGHBORHOODS = {"otros barrios", "otro", "sin especificar"}
@@ -143,6 +148,12 @@ _URGENCY_TERMS: list[tuple[str, str, int]] = [
     ("recibo oferta", "recibo ofertas", 10),
     ("necesito vender", "necesito vender", 12),
     ("vendo ya", "vendo ya", 10),
+    ("sucesion", "sucesión", 12),
+    ("desocupad", "desocupada", 6),
+    ("mudanza", "mudanza", 8),
+    ("por viaje", "por viaje", 8),
+    ("negociable", "negociable", 6),
+    ("ya escriturad", "ya escriturada", 4),
     ("financ", "financiación", 6),
     # débiles (marketing)
     ("oportunidad", "oportunidad", 4),
@@ -185,7 +196,11 @@ def _join_es(items: list[str]) -> str:
 
 
 def usd_per_sqm(row: PropertyRow) -> float | None:
-    """US$/m² usando superficie cubierta (o total como fallback). None si falta dato."""
+    """US$/m² usando superficie cubierta (o total como fallback). None si falta dato.
+
+    Helper general (lo puede usar la UI o señales futuras). Para "bajo precio" usamos
+    `_low_price_sqm` (sólo cubierta) — ver abajo.
+    """
     sqm = row.covered_sqm if row.covered_sqm is not None else row.total_sqm
     if row.price_usd is None or sqm is None:
         return None
@@ -193,6 +208,21 @@ def usd_per_sqm(row: PropertyRow) -> float | None:
     if sqm_f <= 0:
         return None
     return float(row.price_usd) / sqm_f
+
+
+def _low_price_sqm(row: PropertyRow) -> float | None:
+    """US$/m² para comparar precios: SÓLO superficie cubierta. None si falta.
+
+    Mezclar cubierta y total entre peers de la misma cohorte hace el US$/m² no
+    homogéneo (un depto con balcón/patio tiene total >> cubierta) y produce gangas
+    falsas. Las filas sin cubierta no participan del cálculo de bajo precio.
+    """
+    if row.price_usd is None or row.covered_sqm is None:
+        return None
+    c = float(row.covered_sqm)
+    if c <= 0:
+        return None
+    return float(row.price_usd) / c
 
 
 def cohort_key(row: PropertyRow) -> tuple[str, str, str, str] | None:
@@ -247,10 +277,18 @@ def extract_condition(text: str | None) -> Condition:
     a_estrenar = "estrenar" in t  # "a estrenar", "sin estrenar", "nuevo a estrenar"
     years: int | None = 0 if a_estrenar else None
     if years is None:
-        # "50 años" → normalizado "50 anos" (la ñ pierde el acento al normalizar)
-        m = re.search(r"(\d{1,3})\s*anos\b", t)
-        if m and 0 < int(m.group(1)) <= 120:
-            years = int(m.group(1))
+        # "50 años" → normalizado "50 anos" (la ñ pierde el acento al normalizar).
+        # Pero "3 años de garantía" / "10 años de financiación" NO son antigüedad:
+        # descartamos el match si hay un término de garantía/financiación cerca.
+        for m in re.finditer(r"(\d{1,3})\s*anos\b", t):
+            n = int(m.group(1))
+            if not (0 < n <= 120):
+                continue
+            ctx = t[max(0, m.start() - 18) : m.end() + 18]
+            if any(bad in ctx for bad in ("garantia", "gtia", "financ", "credito", "cuota")):
+                continue
+            years = n
+            break
     terms: list[str] = []
     for pat, disp in _NEEDS_WORK_TERMS:
         if pat in t and disp not in terms:
@@ -267,7 +305,7 @@ def signal_low_price(row: PropertyRow, peers_usd_per_sqm: list[float]) -> Signal
     """Precio por m² debajo de la mediana del barrio. Solo APT (`peers` excluye la propia)."""
     if row.property_type != "APT":
         return None
-    mine = usd_per_sqm(row)
+    mine = _low_price_sqm(row)
     if mine is None:
         return None
     peers = [v for v in peers_usd_per_sqm if v > 0]
@@ -281,11 +319,6 @@ def signal_low_price(row: PropertyRow, peers_usd_per_sqm: list[float]) -> Signal
     # mal tipada, terreno como depto, typo de precio). En ambos extremos, no marca.
     if discount < LOW_PRICE_MIN_DISCOUNT or discount > LOW_PRICE_DATA_ERROR_DISCOUNT:
         return None
-    # ¿Por qué está barato? Si el aviso dice "a refaccionar/reciclar/demoler", la baja
-    # está explicada por el estado: no es ganga para entrar a vivir, no la marcamos.
-    cond = extract_condition(" ".join(t for t in (row.title, row.description) if t))
-    if cond.needs_work:
-        return None
     points = _clamp(round(discount * LOW_PRICE_POINTS_PER_DISCOUNT), 1, LOW_PRICE_MAX_POINTS)
     pct = round(discount * 100)
     reason = (
@@ -294,9 +327,17 @@ def signal_low_price(row: PropertyRow, peers_usd_per_sqm: list[float]) -> Signal
         f"{len(peers)} {_TYPE_ES_PLURAL.get(row.property_type, 'propiedades')} en "
         f"{_OP_ES.get(row.operation_type, '')} comparables de {row.neighborhood}."
     )
-    # Contexto de estado para que el agente juzgue (barato Y nuevo = mejor señal;
-    # barato y viejo = parte del descuento puede ser la edad).
-    if cond.a_estrenar:
+    # ¿Por qué está barato? Si el aviso dice "a refaccionar/reciclar/demoler", parte
+    # del descuento se explica por el estado: no se suprime (sigue siendo negocio para
+    # un inversor) pero se le bajan los puntos y se aclara en la razón (ver decisión 006).
+    cond = extract_condition(" ".join(t for t in (row.title, row.description) if t))
+    if cond.needs_work:
+        points = max(1, round(points * NEEDS_WORK_HAIRCUT))
+        reason += (
+            f" Atención: {_join_es(cond.terms)} — parte del precio bajo se explica por el estado."
+        )
+    elif cond.a_estrenar:
+        # Contexto de estado para que el agente juzgue (barato Y nuevo = mejor señal).
         reason += " A estrenar."
     elif cond.antiguedad_years is not None:
         reason += f" Antigüedad ~{cond.antiguedad_years} años."
@@ -307,6 +348,7 @@ def signal_low_price(row: PropertyRow, peers_usd_per_sqm: list[float]) -> Signal
         "cohort_size": len(peers),
         "antiguedad_years": cond.antiguedad_years,
         "a_estrenar": cond.a_estrenar,
+        "needs_work": cond.needs_work,
     }
     return Signal("low_price", points, reason, detail)
 
@@ -314,24 +356,45 @@ def signal_low_price(row: PropertyRow, peers_usd_per_sqm: list[float]) -> Signal
 def signal_price_drop(
     row: PropertyRow, history: list[PricePoint], now: datetime
 ) -> Signal | None:
-    """El precio bajó respecto de una observación anterior, dentro de la ventana."""
-    # Comparamos sólo en US$ normalizado: robusto entre fechas y monedas (en ARS,
-    # un precio nominal "igual" es una baja real por inflación; el US$ lo captura).
-    pts = sorted(
-        (p for p in history if p.price_usd is not None), key=lambda p: p.observed_at
-    )
+    """El precio bajó respecto de una observación anterior, dentro de la ventana.
+
+    Para no confundir una suba del dólar con una baja real: cuando dos observaciones
+    están en la MISMA moneda exigimos que el monto NOMINAL haya bajado (el dueño
+    realmente bajó el precio). Sólo cuando la moneda del aviso cambió entre
+    observaciones caemos al US$ normalizado, y lo aclaramos en la razón.
+    """
+    pts = sorted(history, key=lambda p: p.observed_at)
     if len(pts) < 2:
         return None
     current = pts[-1]
-    curr_usd = float(current.price_usd)  # type: ignore[arg-type]
-    # El último precio distinto al actual, yendo hacia atrás.
-    prev = next((p for p in reversed(pts[:-1]) if float(p.price_usd) != curr_usd), None)  # type: ignore[arg-type]
+    if current.price_usd is None:
+        return None
+    # Punto anterior distinto del actual: por nominal si misma moneda, por US$ si no.
+    prev: PricePoint | None = None
+    for p in reversed(pts[:-1]):
+        if p.price_currency == current.price_currency:
+            if p.price_amount != current.price_amount:
+                prev = p
+                break
+        elif p.price_usd is not None and float(p.price_usd) != float(current.price_usd):
+            prev = p
+            break
     if prev is None:
         return None
-    prev_usd = float(prev.price_usd)  # type: ignore[arg-type]
-    if prev_usd <= 0:
+
+    cross_currency = prev.price_currency != current.price_currency
+    if not cross_currency:
+        prev_v, curr_v = float(prev.price_amount), float(current.price_amount)
+        ccy = current.price_currency
+    else:
+        if prev.price_usd is None:
+            return None
+        prev_v, curr_v = float(prev.price_usd), float(current.price_usd)
+        ccy = "USD"
+    # Sin baja real (igual, suba, o artefacto de tipo de cambio): no marca.
+    if prev_v <= 0 or curr_v >= prev_v:
         return None
-    drop = (prev_usd - curr_usd) / prev_usd
+    drop = (prev_v - curr_v) / prev_v
     if drop < DROP_MIN:
         return None
     days = (now - current.observed_at).days
@@ -340,13 +403,19 @@ def signal_price_drop(
     points = _clamp(round(drop * DROP_POINTS_PER_DROP), 1, DROP_MAX_POINTS)
     pct = round(drop * 100)
     when = "hoy" if days <= 0 else ("ayer" if days == 1 else f"hace {days} días")
+    prefix = "US$" if ccy == "USD" else "$"
     reason = (
-        f"Bajó de US$ {_fmt_money(prev_usd)} a US$ {_fmt_money(curr_usd)} (-{pct}%) {when}."
+        f"Bajó de {prefix} {_fmt_money(prev_v)} a {prefix} {_fmt_money(curr_v)} "
+        f"(-{pct}%) {when}."
     )
+    if cross_currency:
+        reason += " (estimado en US$ por cambio de moneda del aviso)."
     detail = {
         "drop_pct": pct,
-        "from_usd": round(prev_usd, 2),
-        "to_usd": round(curr_usd, 2),
+        "from": round(prev_v, 2),
+        "to": round(curr_v, 2),
+        "currency": ccy,
+        "cross_currency": cross_currency,
         "days_ago": days,
     }
     return Signal("price_drop", points, reason, detail)
@@ -427,11 +496,15 @@ def score_property(
 def build_cohorts(
     rows: list[PropertyRow],
 ) -> dict[tuple[str, str, str, str], list[tuple[str, float]]]:
-    """Agrupa US$/m² por cohorte (op, tipo, ciudad, barrio). key → [(property_id, ups)]."""
+    """Agrupa US$/m² por cohorte (op, tipo, ciudad, barrio). key → [(property_id, ups)].
+
+    Usa la métrica covered-only (igual que el cálculo de bajo precio) para que peers y
+    candidato se comparen sobre la misma base. Filas sin cubierta no entran.
+    """
     cohorts: dict[tuple[str, str, str, str], list[tuple[str, float]]] = {}
     for row in rows:
         key = cohort_key(row)
-        v = usd_per_sqm(row)
+        v = _low_price_sqm(row)
         if key is None or v is None or v <= 0:
             continue
         cohorts.setdefault(key, []).append((row.id, v))
