@@ -74,6 +74,22 @@ def test_real_page_attributes_parse():
 
 
 @pytest.mark.skipif(not SAMPLE_HTML.exists(), reason="fixture not captured")
+def test_real_page_extracts_agency():
+    # Identificar la inmobiliaria es el nucleo de la busqueda reversa. Antes era
+    # siempre None en Argenprop; ahora sale del alt del logo en .card__agent.
+    html = SAMPLE_HTML.read_text(encoding="utf-8")
+    cards = parse_listing_page(html, operation_type="SALE", property_type="APT")
+    with_agency = [c for c in cards if c.agency_name]
+    assert len(with_agency) >= len(cards) * 0.7, (
+        f"solo {len(with_agency)}/{len(cards)} cards con inmobiliaria"
+    )
+    # nombres reales, no vacios ni placeholders
+    assert any("inmobiliaria" in (c.agency_name or "").lower()
+               or "propiedades" in (c.agency_name or "").lower()
+               for c in with_agency)
+
+
+@pytest.mark.skipif(not SAMPLE_HTML.exists(), reason="fixture not captured")
 def test_real_page_has_neighborhoods():
     html = SAMPLE_HTML.read_text(encoding="utf-8")
     cards = parse_listing_page(html, operation_type="SALE", property_type="APT")

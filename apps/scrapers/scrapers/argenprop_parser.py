@@ -171,6 +171,12 @@ def parse_listing_card(
         photo = sel.css(".card__photos img::attr(data-src)").get() or photo
     photos = [photo] if photo and photo.startswith("http") else []
 
+    # Agency: the publisher logo's alt text carries the inmobiliaria name
+    # ("Ruger Negocios Inmobiliarios", "Vidigh Propiedades", ...). Identifying who
+    # holds each listing is the core of the reverse search — before this it was
+    # always None for Argenprop.
+    agency = (sel.css(".card__agent img::attr(alt)").get() or "").strip() or None
+
     return MlListingCard(
         portal_id=str(portal_id),
         url=url,
@@ -184,7 +190,7 @@ def parse_listing_card(
         city=None,
         province=None,
         photos=photos,
-        agency_name=None,
+        agency_name=agency,
         **attrs,
     )
 
