@@ -69,5 +69,5 @@ la señal de bajo precio. Cambio: ahora **no se suprime** — se le aplica un *h
 de puntos, `NEEDS_WORK_HAIRCUT = 0.5`) y la razón lo aclara ("parte del precio bajo se
 explica por el estado"). Motivo: un depto 20% bajo mediana a refaccionar **sigue siendo
 negocio** para un inversor/flip; suprimirlo le esconde oportunidades reales al agente. El
-default por entrar-a-vivir lo da el contexto en la razón, no la supresión. El dueño puede
-pedir volver a suprimir (D5 queda abierta). Ver `signal_low_price` en `scorer.py`.
+default por entrar-a-vivir lo da el contexto en la razón, no la supresión. **D5 resuelta: el
+dueño confirmó el haircut el 2026-06-01.** Ver `signal_low_price` en `scorer.py`.
