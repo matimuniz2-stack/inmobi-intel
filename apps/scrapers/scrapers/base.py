@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any
+from typing import Any, TypeVar
 
 # Process exit code meaning "the scrape ran without crashing but pulled 0 items
 # from every (zone, op)". For these portals that almost always means we were
@@ -13,6 +15,40 @@ from typing import Any
 # legitimately empty result set, so we surface it as a failure instead of a
 # misleading green check. Distinct from 2 (config/usage error).
 EXIT_SCRAPED_NOTHING = 3
+
+_T = TypeVar("_T")
+
+
+async def fetch_with_retry(
+    fetch: Callable[[], Awaitable[_T]],
+    *,
+    attempts: int = 3,
+    base_delay: float = 2.0,
+    logger: Any | None = None,
+) -> _T:
+    """Retry a network fetch on transient errors with exponential backoff.
+
+    Wraps a Playwright navigation that may fail with a timeout or a transient
+    network error (common with headless Chromium on a residential IP). Retries
+    `attempts` times with delays base_delay, 2·base_delay, 4·base_delay, ...
+    and re-raises the last exception if all attempts fail.
+
+    Only retries on EXCEPTIONS. Anti-bot block detection (DataDome challenge,
+    bot-wall, empty page) happens AFTER the fetch in each scraper — a block must
+    not be retried in a tight loop, it should break/back off at the zone level.
+    """
+    last_exc: BaseException | None = None
+    for i in range(attempts):
+        try:
+            return await fetch()
+        except Exception as e:  # noqa: BLE001 — re-raised below if all attempts fail
+            last_exc = e
+            if logger is not None:
+                logger.warning("fetch_retry", attempt=i + 1, attempts=attempts, error=repr(e))
+            if i < attempts - 1:
+                await asyncio.sleep(base_delay * (2**i))
+    assert last_exc is not None
+    raise last_exc
 
 
 @dataclass

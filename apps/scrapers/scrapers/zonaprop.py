@@ -20,7 +20,7 @@ from typing import cast
 from playwright.async_api import BrowserContext, Page, async_playwright
 from playwright_stealth import stealth_async
 
-from .base import BaseScraper, ScrapeResult, session_exit_code
+from .base import BaseScraper, ScrapeResult, fetch_with_retry, session_exit_code
 from .config import DATABASE_URL, get_zone, load_zones
 from .db import (
     create_scrape_job,
@@ -123,7 +123,9 @@ class ZonapropScraper(BaseScraper):
                 log.info("scrape_page_start", url=url)
 
                 try:
-                    html, status = await self._fetch_page_html(url)
+                    html, status = await fetch_with_retry(
+                        lambda: self._fetch_page_html(url), logger=log
+                    )
                 except Exception as e:
                     log.error("fetch_failed", error=repr(e))
                     result.errors += 1

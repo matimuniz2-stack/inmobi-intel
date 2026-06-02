@@ -12,7 +12,7 @@ from typing import Literal
 
 from playwright.async_api import BrowserContext, Page, async_playwright
 
-from .base import BaseScraper, ScrapeResult, session_exit_code
+from .base import BaseScraper, ScrapeResult, fetch_with_retry, session_exit_code
 from .config import DATABASE_URL, get_zone, load_zones
 from .db import (
     create_scrape_job,
@@ -102,7 +102,9 @@ class MercadoLibreScraper(BaseScraper):
                 log.info("scrape_page_start", url=url)
 
                 try:
-                    html = await self._fetch_page_html(page, url)
+                    html = await fetch_with_retry(
+                        lambda: self._fetch_page_html(page, url), logger=log
+                    )
                 except Exception as e:
                     log.error("scrape_page_fetch_failed", error=repr(e))
                     result.errors += 1
