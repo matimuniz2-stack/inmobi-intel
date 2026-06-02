@@ -12,6 +12,13 @@ const config: NextConfig = {
     remotePatterns: [
       { protocol: 'https', hostname: 'http2.mlstatic.com' },
       { protocol: 'https', hostname: '*.mlstatic.com' },
+      // Argenprop sirve las fotos desde su propio dominio; ZonaProp desde el CDN de
+      // Navent (imgar.zonapropcdn.com / *.naventcdn.com). Sin esto, next/image no las
+      // optimiza y caen sin lazy/resize (peor en mobile/datos móviles de MdP).
+      { protocol: 'https', hostname: 'www.argenprop.com' },
+      { protocol: 'https', hostname: 'imgar.zonapropcdn.com' },
+      { protocol: 'https', hostname: '*.zonapropcdn.com' },
+      { protocol: 'https', hostname: '*.naventcdn.com' },
     ],
   },
 };
