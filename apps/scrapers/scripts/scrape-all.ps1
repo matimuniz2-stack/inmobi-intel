@@ -114,6 +114,23 @@ if (-not $DryRun) {
     }
 }
 
+# --- Geocode new properties (fills lat/lng for the map at /mapa) ---
+# Skipped under -DryRun. Idempotent: only touches active rows missing lat/lng, and a
+# local cache avoids re-hitting Nominatim for addresses already resolved. Nominatim's
+# 1 req/s policy makes this slow, so we cap each run with --limit; coverage fills in
+# over successive nightly runs. A geocoder failure is logged but doesn't change the
+# task's exit code (the scrape itself is what matters).
+if (-not $DryRun) {
+    "--- geocoder ---" | Tee-Object -FilePath $log -Append
+    & $poetryExe run python -m geocode --limit 500 2>&1 | Tee-Object -FilePath $log -Append
+    $geoCode = $LASTEXITCODE
+    "geocoder exit code: $geoCode" | Tee-Object -FilePath $log -Append
+    if ($geoCode -ne 0) {
+        "WARN: geocoder failed (exit $geoCode) - some properties left without coords." |
+            Tee-Object -FilePath $log -Append
+    }
+}
+
 # --- Rotate old logs (this runs daily; logs/ would grow without bound) ---
 Get-ChildItem -Path $logDir -Filter "scrape-*.log" -ErrorAction SilentlyContinue |
     Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-30) } |

@@ -168,6 +168,7 @@ Progreso:
 **Fase 2 (en curso):**
 - [x] **Multi-portal** — Argenprop + ZonaProp integrados (3 portales scrapeando a Supabase). Scrape confiable corre local desde IP residencial (decisión 004).
 - [x] **Detector de oportunidades** — scorer 0-100 + razones en español (4 señales: bajo precio vs mercado, baja reciente, mucho tiempo publicada, urgencia en texto). Tablas `price_history` + `opportunities`, CLI `python -m opportunity`, página `/oportunidades`. Ver decisión 005. Migración aplicada a Supabase y primer scoreo corrido (2026-05-31, 404 oportunidades al 2026-06-01).
+- [x] **Mapa de propiedades** (`/mapa`) — geocoding real (Nominatim, gratis) + Leaflet/OSM. Pin por operación, clustering, popup con foto+info al hover. Geocoder `python -m geocode` (llena `lat`/`lng`, cacheado, cableado en `scrape-all.ps1`); tRPC `properties.forMap`. Ver decisión 009. **Pendiente: correr `python -m geocode` contra la DB** — el mapa está vacío hasta poblar coordenadas (la precisión depende de la dirección del portal; muchos avisos caen a nivel barrio + jitter).
 
 ### Auditoría + mega-plan nocturno (2026-06-01)
 
@@ -225,4 +226,4 @@ Plan completo en `../plan-app-scraper-inmobiliario.md`. Fases siguientes documen
 
 ---
 
-> **Última actualización**: 2026-06-01 — Auditoría + mega-plan nocturno (`docs/plans/overnight-2026-06-01-megaplan.md`); rama `overnight/cobertura-calidad-2026-06-01` con T3/T6/T9/T12/T17-19/T25/T27/T28/T31 hechos (decisiones 006, 007). Actualizá esta nota cuando avancen fases.
+> **Última actualización**: 2026-06-09 — Feature MAPA: geocoding (Nominatim) + Leaflet/OSM en `/mapa` (decisión 009). Falta correr `python -m geocode` contra la DB para poblar coordenadas. Antes: 2026-06-01 — Auditoría + mega-plan nocturno (`docs/plans/overnight-2026-06-01-megaplan.md`); rama `overnight/cobertura-calidad-2026-06-01` con T3/T6/T9/T12/T17-19/T25/T27/T28/T31 hechos (decisiones 006, 007). Actualizá esta nota cuando avancen fases.

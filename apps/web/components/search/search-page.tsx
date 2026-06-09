@@ -1,66 +1,18 @@
 'use client';
 
-import { ChevronLeft, ChevronRight, Flame, Loader2, SlidersHorizontal } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Flame, Loader2, Map, SlidersHorizontal } from 'lucide-react';
 import Link from 'next/link';
 import * as React from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { trpc } from '@/lib/trpc/client';
 import { cn } from '@/lib/utils';
 
+import { DEFAULT_FILTERS, PAGE_SIZE, toSearchInput, type Filters, type Sort } from './filters';
+import { FiltersPanel } from './filters-panel';
 import { PropertyCard } from './property-card';
-import { ZoneCombobox } from './zone-combobox';
-
-type Operation = 'SALE' | 'RENT' | 'TEMP_RENT' | '';
-type PropertyType = 'APT' | 'HOUSE' | 'PH' | 'LOCAL' | 'TERRENO' | 'OTRO' | '';
-type Sort = 'recent' | 'price_asc' | 'price_desc';
-
-type BedroomsFilter = '' | '1' | '2' | '3' | '4' | '5plus';
-
-interface Filters {
-  zoneSlug: string | null;
-  operationType: Operation;
-  propertyType: PropertyType;
-  bedrooms: BedroomsFilter;
-  priceUsdMin: string;
-  priceUsdMax: string;
-  sort: Sort;
-}
-
-const PAGE_SIZE = 24;
-
-const DEFAULT_FILTERS: Filters = {
-  zoneSlug: null,
-  operationType: 'SALE',
-  propertyType: '',
-  bedrooms: '',
-  priceUsdMin: '',
-  priceUsdMax: '',
-  sort: 'recent',
-};
-
-function toQueryInput(f: Filters, offset: number) {
-  const bedrooms: number | '5plus' | undefined =
-    f.bedrooms === ''
-      ? undefined
-      : f.bedrooms === '5plus'
-        ? ('5plus' as const)
-        : Number(f.bedrooms);
-  return {
-    zoneSlug: f.zoneSlug ?? undefined,
-    operationType: f.operationType === '' ? undefined : f.operationType,
-    propertyType: f.propertyType === '' ? undefined : f.propertyType,
-    bedrooms,
-    priceUsdMin: f.priceUsdMin ? Number(f.priceUsdMin) : undefined,
-    priceUsdMax: f.priceUsdMax ? Number(f.priceUsdMax) : undefined,
-    sort: f.sort,
-    offset,
-    limit: PAGE_SIZE,
-  };
-}
 
 export function SearchPage() {
   const [filters, setFilters] = React.useState<Filters>(DEFAULT_FILTERS);
@@ -68,7 +20,7 @@ export function SearchPage() {
   const [filtersOpenMobile, setFiltersOpenMobile] = React.useState(false);
 
   const offset = page * PAGE_SIZE;
-  const query = trpc.properties.search.useQuery(toQueryInput(filters, offset), {
+  const query = trpc.properties.search.useQuery(toSearchInput(filters, offset), {
     placeholderData: (prev) => prev,
   });
 
@@ -100,6 +52,12 @@ export function SearchPage() {
             <p className="text-sm text-muted-foreground">Búsqueda Reversa</p>
           </div>
           <div className="flex items-center gap-2">
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/mapa">
+                <Map className="mr-2 h-4 w-4" />
+                Mapa
+              </Link>
+            </Button>
             <Button asChild variant="ghost" size="sm">
               <Link href="/oportunidades">
                 <Flame className="mr-2 h-4 w-4" />
@@ -214,107 +172,6 @@ export function SearchPage() {
           </section>
         </div>
       </main>
-    </div>
-  );
-}
-
-function FiltersPanel({
-  filters,
-  updateFilter,
-  onReset,
-}: {
-  filters: Filters;
-  updateFilter: <K extends keyof Filters>(k: K, v: Filters[K]) => void;
-  onReset: () => void;
-}) {
-  return (
-    <div className="space-y-4 rounded-lg border bg-card p-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold">Filtros</h2>
-        <Button variant="ghost" size="sm" onClick={onReset} className="h-7 text-xs">
-          Limpiar
-        </Button>
-      </div>
-
-      <div className="space-y-2">
-        <Label>Zona</Label>
-        <ZoneCombobox
-          value={filters.zoneSlug}
-          onChange={(slug) => updateFilter('zoneSlug', slug)}
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="operation">Operación</Label>
-        <select
-          id="operation"
-          value={filters.operationType}
-          onChange={(e) => updateFilter('operationType', e.target.value as Operation)}
-          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <option value="">Todas</option>
-          <option value="SALE">Venta</option>
-          <option value="RENT">Alquiler</option>
-          <option value="TEMP_RENT">Alq. temporal</option>
-        </select>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="ptype">Tipo de propiedad</Label>
-        <select
-          id="ptype"
-          value={filters.propertyType}
-          onChange={(e) => updateFilter('propertyType', e.target.value as PropertyType)}
-          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <option value="">Todos</option>
-          <option value="APT">Departamento</option>
-          <option value="HOUSE">Casa</option>
-          <option value="PH">PH</option>
-          <option value="LOCAL">Local</option>
-          <option value="TERRENO">Terreno</option>
-          <option value="OTRO">Otro</option>
-        </select>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="bedrooms">Ambientes</Label>
-        <select
-          id="bedrooms"
-          value={filters.bedrooms}
-          onChange={(e) => updateFilter('bedrooms', e.target.value as BedroomsFilter)}
-          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <option value="">Cualquiera</option>
-          <option value="1">1 (monoambiente)</option>
-          <option value="2">2</option>
-          <option value="3">3</option>
-          <option value="4">4</option>
-          <option value="5plus">5 o más</option>
-        </select>
-      </div>
-
-      <div className="space-y-2">
-        <Label>Precio (USD)</Label>
-        <div className="grid grid-cols-2 gap-2">
-          <Input
-            type="number"
-            inputMode="numeric"
-            min={0}
-            value={filters.priceUsdMin}
-            onChange={(e) => updateFilter('priceUsdMin', e.target.value)}
-            placeholder="Min"
-          />
-          <Input
-            type="number"
-            inputMode="numeric"
-            min={0}
-            value={filters.priceUsdMax}
-            onChange={(e) => updateFilter('priceUsdMax', e.target.value)}
-            placeholder="Max"
-          />
-        </div>
-      </div>
     </div>
   );
 }

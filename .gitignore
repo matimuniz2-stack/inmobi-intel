@@ -9,6 +9,9 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
+# Geocoding cache (caché local de Nominatim; se regenera sola)
+geocode_cache.json
+
 # Build artifacts
 .next/
 out/
