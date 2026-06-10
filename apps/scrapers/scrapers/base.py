@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any, TypeVar
 
@@ -57,6 +57,11 @@ class ScrapeResult:
     items_created: int = 0
     items_updated: int = 0
     errors: int = 0
+    # Portal-reported total results per property type ("ALL" when the portal
+    # mixes types in one listing, like ML). items_found / sum(portal_totals)
+    # is the coverage KPI for the (zone, op) — how much of what the portal
+    # publishes we actually captured.
+    portal_totals: dict[str, int] = field(default_factory=dict)
 
     def merge(self, other: ScrapeResult) -> None:
         """Accumulate another (zone, op) result into this session-wide total."""
@@ -64,6 +69,8 @@ class ScrapeResult:
         self.items_created += other.items_created
         self.items_updated += other.items_updated
         self.errors += other.errors
+        for key, total in other.portal_totals.items():
+            self.portal_totals[key] = self.portal_totals.get(key, 0) + total
 
 
 def session_exit_code(total: ScrapeResult, *, logger: Any) -> int:

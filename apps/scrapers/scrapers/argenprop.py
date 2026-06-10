@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import random
 import sys
 from decimal import Decimal
 from typing import cast
 
 from playwright.async_api import BrowserContext, Page, async_playwright
 
-from .argenprop_parser import parse_listing_page
+from .argenprop_parser import detect_total_results, parse_listing_page
 from .base import BaseScraper, ScrapeResult, fetch_with_retry, session_exit_code
 from .config import DATABASE_URL, get_zone, load_zones
 from .db import (
@@ -117,6 +118,12 @@ class ArgenpropScraper(BaseScraper):
                         log.info("no_cards_break", html_size=len(html))
                         break
 
+                    if page_num == 1:
+                        total = detect_total_results(html)
+                        if total is not None:
+                            log.info("scrape_zone_total", total=total)
+                            result.portal_totals[prop_type] = total
+
                     if prev_first_id is not None and cards[0].portal_id == prev_first_id:
                         log.warning("pagination_stuck")
                         break
@@ -155,6 +162,11 @@ class ArgenpropScraper(BaseScraper):
                     if len(cards) < 15:
                         log.info("last_page_short", count=len(cards))
                         break
+
+                    # Polite inter-page delay. With the barrio partition the
+                    # nightly run makes ~10x more requests than before; firing
+                    # them back-to-back is the easiest way to get blocked.
+                    await asyncio.sleep(random.uniform(1.5, 3.5))
         finally:
             await page.close()
         return result
@@ -171,8 +183,14 @@ async def _build_context(playwright) -> BrowserContext:
 
 async def _resolve_zones(zone_arg: str) -> list[dict]:
     if zone_arg in ("all", "*"):
-        # Argenprop URLs work at city-level. Skip neighborhood-only zones for now.
-        return [z for z in load_zones() if not z.get("mlNeighborhood")]
+        # City-level zones always work via zone['slug']. Barrio zones are only
+        # reachable when their canonical argenpropSlug was discovered from the
+        # portal's own facet links (scripts/discover_barrio_slugs.py) — guessing
+        # slugs risks silently scraping the wrong location.
+        return [
+            z for z in load_zones()
+            if not z.get("mlNeighborhood") or z.get("argenpropSlug")
+        ]
     slugs = [s.strip() for s in zone_arg.split(",") if s.strip()]
     return [get_zone(s) for s in slugs]
 
@@ -255,6 +273,7 @@ async def run(
                                 items_found=res.items_found,
                                 items_created=res.items_created,
                                 items_updated=res.items_updated,
+                                portal_totals=res.portal_totals,
                             )
                 except Exception as e:
                     total.errors += 1

@@ -43,11 +43,14 @@ $action = New-ScheduledTaskAction `
 
 $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek $DaysOfWeek -At $At
 
+# 8h: la corrida particionada por barrio (T5) recorre ~140 (portal, zona) con
+# pausas anti-bot; 3h la cortaba a la mitad. Si se corta igual, el checkpoint
+# diario hace que la próxima corrida retome donde quedó.
 $settings = New-ScheduledTaskSettingsSet `
     -StartWhenAvailable `
     -AllowStartIfOnBatteries `
     -DontStopIfGoingOnBatteries `
-    -ExecutionTimeLimit (New-TimeSpan -Hours 3)
+    -ExecutionTimeLimit (New-TimeSpan -Hours 8)
 
 Register-ScheduledTask `
     -TaskName $TaskName `

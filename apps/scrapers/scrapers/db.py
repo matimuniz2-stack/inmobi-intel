@@ -233,11 +233,22 @@ def finish_scrape_job(
     items_created: int,
     items_updated: int,
     error: str | None = None,
+    portal_totals: dict[str, int] | None = None,
 ) -> None:
+    """Close a scrape job. `portal_totals` (the portal's own result count per
+    property type) is merged into the params JSONB so coverage can be computed
+    per job without a schema migration: items_found / sum(portal_totals)."""
+    extra_params: dict = {}
+    if portal_totals:
+        extra_params["portal_totals"] = portal_totals
+        total = sum(portal_totals.values())
+        if total > 0:
+            extra_params["coverage"] = round(items_found / total, 4)
     conn.execute(
         "UPDATE scrape_jobs SET status = %s::\"ScrapeJobStatus\", completed_at = now(), "
         "items_found = %s, items_created = %s, items_updated = %s, "
-        "error_log = %s::jsonb "
+        "error_log = %s::jsonb, "
+        "params = params || %s::jsonb "
         "WHERE id = %s",
         (
             status,
@@ -245,6 +256,7 @@ def finish_scrape_job(
             items_created,
             items_updated,
             json.dumps({"error": error}) if error else None,
+            json.dumps(extra_params),
             job_id,
         ),
     )

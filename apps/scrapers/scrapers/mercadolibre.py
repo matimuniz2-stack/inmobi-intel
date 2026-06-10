@@ -128,6 +128,7 @@ class MercadoLibreScraper(BaseScraper):
                     total = detect_total_results(html)
                     if total is not None:
                         log.info("scrape_zone_total", total=total)
+                        result.portal_totals["ALL"] = total
 
                 log.info("scrape_page_parsed", count=len(cards))
                 result.items_found += len(cards)
@@ -257,6 +258,7 @@ async def run(
                                 items_found=res.items_found,
                                 items_created=res.items_created,
                                 items_updated=res.items_updated,
+                                portal_totals=res.portal_totals,
                             )
                 except Exception as e:
                     total.errors += 1

@@ -96,3 +96,12 @@ def test_real_page_has_neighborhoods():
     with_nh = [c for c in cards if c.neighborhood]
     # All Argenprop URLs include a location slug we extract as neighborhood
     assert len(with_nh) >= len(cards) * 0.9
+
+
+def test_detect_total_results_from_fixture():
+    from scrapers.argenprop_parser import detect_total_results
+
+    html = SAMPLE_HTML.read_text(encoding="utf-8")
+    # El fixture muestra "6.444 Departamentos en Venta en Mar del Plata..."
+    assert detect_total_results(html) == 6444
+    assert detect_total_results("<html><h1>sin numeros</h1></html>") is None
