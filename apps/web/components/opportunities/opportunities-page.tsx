@@ -4,7 +4,13 @@ import { ChevronLeft, ChevronRight, Loader2, Search, SlidersHorizontal } from 'l
 import Link from 'next/link';
 import * as React from 'react';
 
-import { ZoneCombobox } from '@/components/search/zone-combobox';
+import {
+  DEFAULT_FILTERS,
+  PAGE_SIZE,
+  toCommonInput,
+  type Filters,
+} from '@/components/search/filters';
+import { FiltersPanel } from '@/components/search/filters-panel';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -13,55 +19,40 @@ import { cn } from '@/lib/utils';
 
 import { OpportunityCard } from './opportunity-card';
 
-type Operation = 'SALE' | 'RENT' | 'TEMP_RENT' | '';
-type PropertyType = 'APT' | 'HOUSE' | 'PH' | 'LOCAL' | 'TERRENO' | 'OTRO' | '';
 type MinScore = '' | '35' | '60';
 
-interface Filters {
-  zoneSlug: string | null;
-  operationType: Operation;
-  propertyType: PropertyType;
-  minScore: MinScore;
-}
-
-const PAGE_SIZE = 24;
-
-const DEFAULT_FILTERS: Filters = {
-  zoneSlug: null,
-  operationType: '',
-  propertyType: '',
-  minScore: '',
-};
-
-function toQueryInput(f: Filters, offset: number) {
-  return {
-    zoneSlug: f.zoneSlug ?? undefined,
-    operationType: f.operationType === '' ? undefined : f.operationType,
-    propertyType: f.propertyType === '' ? undefined : f.propertyType,
-    minScore: f.minScore === '' ? undefined : Number(f.minScore),
-    offset,
-    limit: PAGE_SIZE,
-  };
-}
+// En oportunidades el default es "todas las operaciones": la lista curada ya es
+// chica y el usuario quiere ver todo lo que el detector marcó.
+const OPPORTUNITY_DEFAULTS: Filters = { ...DEFAULT_FILTERS, operationType: '' };
 
 export function OpportunitiesPage() {
-  const [filters, setFilters] = React.useState<Filters>(DEFAULT_FILTERS);
+  const [filters, setFilters] = React.useState<Filters>(OPPORTUNITY_DEFAULTS);
+  const [minScore, setMinScore] = React.useState<MinScore>('');
   const [page, setPage] = React.useState(0);
   const [filtersOpenMobile, setFiltersOpenMobile] = React.useState(false);
 
   const offset = page * PAGE_SIZE;
-  const query = trpc.opportunities.list.useQuery(toQueryInput(filters, offset), {
-    placeholderData: (prev) => prev,
-  });
+  const query = trpc.opportunities.list.useQuery(
+    {
+      ...toCommonInput(filters),
+      minScore: minScore === '' ? undefined : Number(minScore),
+      offset,
+      limit: PAGE_SIZE,
+    },
+    { placeholderData: (prev) => prev },
+  );
 
   React.useEffect(() => {
     setPage(0);
-  }, [filters.zoneSlug, filters.operationType, filters.propertyType, filters.minScore]);
+  }, [filters, minScore]);
 
   const updateFilter = <K extends keyof Filters>(k: K, v: Filters[K]) =>
     setFilters((f) => ({ ...f, [k]: v }));
 
-  const resetFilters = () => setFilters(DEFAULT_FILTERS);
+  const resetFilters = () => {
+    setFilters(OPPORTUNITY_DEFAULTS);
+    setMinScore('');
+  };
 
   const totalPages = query.data ? Math.ceil(query.data.total / PAGE_SIZE) : 0;
 
@@ -96,7 +87,26 @@ export function OpportunitiesPage() {
       <main className="container py-4 md:py-6">
         <div className="grid gap-6 md:grid-cols-[280px_1fr]">
           <aside className={cn('space-y-4', !filtersOpenMobile && 'hidden md:block')}>
-            <FiltersPanel filters={filters} updateFilter={updateFilter} onReset={resetFilters} />
+            <FiltersPanel
+              filters={filters}
+              updateFilter={updateFilter}
+              onReset={resetFilters}
+              footer={
+                <div className="space-y-2">
+                  <Label htmlFor="minscore">Fuerza de la oportunidad</Label>
+                  <select
+                    id="minscore"
+                    value={minScore}
+                    onChange={(e) => setMinScore(e.target.value as MinScore)}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <option value="">Todas</option>
+                    <option value="35">Buenas (score 35+)</option>
+                    <option value="60">Fuertes (score 60+)</option>
+                  </select>
+                </div>
+              }
+            />
           </aside>
 
           <section className="space-y-4">
@@ -164,82 +174,6 @@ export function OpportunitiesPage() {
           </section>
         </div>
       </main>
-    </div>
-  );
-}
-
-function FiltersPanel({
-  filters,
-  updateFilter,
-  onReset,
-}: {
-  filters: Filters;
-  updateFilter: <K extends keyof Filters>(k: K, v: Filters[K]) => void;
-  onReset: () => void;
-}) {
-  return (
-    <div className="space-y-4 rounded-lg border bg-card p-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold">Filtros</h2>
-        <Button variant="ghost" size="sm" onClick={onReset} className="h-7 text-xs">
-          Limpiar
-        </Button>
-      </div>
-
-      <div className="space-y-2">
-        <Label>Zona</Label>
-        <ZoneCombobox
-          value={filters.zoneSlug}
-          onChange={(slug) => updateFilter('zoneSlug', slug)}
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="operation">Operación</Label>
-        <select
-          id="operation"
-          value={filters.operationType}
-          onChange={(e) => updateFilter('operationType', e.target.value as Operation)}
-          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <option value="">Todas</option>
-          <option value="SALE">Venta</option>
-          <option value="RENT">Alquiler</option>
-          <option value="TEMP_RENT">Alq. temporal</option>
-        </select>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="ptype">Tipo de propiedad</Label>
-        <select
-          id="ptype"
-          value={filters.propertyType}
-          onChange={(e) => updateFilter('propertyType', e.target.value as PropertyType)}
-          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <option value="">Todos</option>
-          <option value="APT">Departamento</option>
-          <option value="HOUSE">Casa</option>
-          <option value="PH">PH</option>
-          <option value="LOCAL">Local</option>
-          <option value="TERRENO">Terreno</option>
-          <option value="OTRO">Otro</option>
-        </select>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="minscore">Fuerza de la oportunidad</Label>
-        <select
-          id="minscore"
-          value={filters.minScore}
-          onChange={(e) => updateFilter('minScore', e.target.value as MinScore)}
-          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <option value="">Todas</option>
-          <option value="35">Buenas (score 35+)</option>
-          <option value="60">Fuertes (score 60+)</option>
-        </select>
-      </div>
     </div>
   );
 }

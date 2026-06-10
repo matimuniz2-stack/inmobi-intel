@@ -1,25 +1,11 @@
 import { z } from 'zod';
 
 import { prisma, type Prisma } from '@inmobi/db';
-import { zonesBySlug } from '@inmobi/shared-types';
 
 import { publicProcedure, router } from '../server';
-
-const OperationEnum = z.enum(['SALE', 'RENT', 'TEMP_RENT']);
-const PropertyTypeEnum = z.enum(['APT', 'HOUSE', 'PH', 'LOCAL', 'TERRENO', 'OTRO']);
+import { buildPropertyWhere, CommonFilters } from './property-filters';
 
 const SortEnum = z.enum(['recent', 'price_asc', 'price_desc']);
-const BedroomsFilter = z.union([z.number().int().min(1).max(20), z.literal('5plus')]);
-
-// Filtros espaciales/atributos comunes a la búsqueda en lista y al mapa.
-const CommonFilters = {
-  zoneSlug: z.string().min(1).optional(),
-  operationType: OperationEnum.optional(),
-  propertyType: PropertyTypeEnum.optional(),
-  bedrooms: BedroomsFilter.optional(),
-  priceUsdMin: z.number().nonnegative().optional(),
-  priceUsdMax: z.number().nonnegative().optional(),
-};
 
 const SearchInput = z.object({
   ...CommonFilters,
@@ -30,55 +16,14 @@ const SearchInput = z.object({
 
 const MapInput = z.object(CommonFilters);
 
-type CommonFilterInput = z.infer<typeof MapInput>;
-
 // El mapa devuelve TODAS las propiedades que matchean (no pagina), pero con un tope
 // duro para no mandar payloads gigantes ni clavar el navegador. Las más recientes
 // primero, así el tope conserva lo más relevante.
 const MAP_LIMIT = 2000;
 
-/**
- * Traduce los filtros a un `where` de Prisma. Resuelve la zona elegida a un filtro
- * (city, neighborhood?):
- * - Zona con mlNeighborhood: barrio exacto dentro de la ciudad (barrios CABA y MdP).
- * - Zona con sólo mlCity: filtra por ciudad (catch-all de MdP y alrededores).
- * - Sin zona: sin filtro espacial.
- */
-function buildWhere(input: CommonFilterInput): Prisma.PropertyWhereInput {
-  const zone = input.zoneSlug ? zonesBySlug.get(input.zoneSlug) : null;
-  const zoneFilter: Prisma.PropertyWhereInput = zone
-    ? zone.mlNeighborhood
-      ? {
-          neighborhood: { equals: zone.mlNeighborhood, mode: 'insensitive' },
-          city: { equals: zone.mlCity, mode: 'insensitive' },
-        }
-      : { city: { equals: zone.mlCity, mode: 'insensitive' } }
-    : {};
-
-  return {
-    isActive: true,
-    ...zoneFilter,
-    ...(input.operationType ? { operationType: input.operationType } : {}),
-    ...(input.propertyType ? { propertyType: input.propertyType } : {}),
-    ...(input.bedrooms !== undefined
-      ? input.bedrooms === '5plus'
-        ? { bedrooms: { gte: 5 } }
-        : { bedrooms: input.bedrooms }
-      : {}),
-    ...(input.priceUsdMin !== undefined || input.priceUsdMax !== undefined
-      ? {
-          priceUsdNormalized: {
-            ...(input.priceUsdMin !== undefined ? { gte: input.priceUsdMin } : {}),
-            ...(input.priceUsdMax !== undefined ? { lte: input.priceUsdMax } : {}),
-          },
-        }
-      : {}),
-  };
-}
-
 export const propertiesRouter = router({
   search: publicProcedure.input(SearchInput).query(async ({ input }) => {
-    const where = buildWhere(input);
+    const where = buildPropertyWhere(input);
 
     const orderBy: Prisma.PropertyOrderByWithRelationInput[] =
       input.sort === 'price_asc'
@@ -117,7 +62,7 @@ export const propertiesRouter = router({
   // y su popup necesitan). Devuelve también cuántas matchean sin coordenadas todavía,
   // para que el frontend pueda avisar "faltan geocodificar N".
   forMap: publicProcedure.input(MapInput).query(async ({ input }) => {
-    const base = buildWhere(input);
+    const base = buildPropertyWhere(input);
     const withCoords: Prisma.PropertyWhereInput = {
       ...base,
       lat: { not: null },

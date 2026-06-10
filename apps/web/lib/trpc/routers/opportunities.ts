@@ -1,42 +1,23 @@
 import { z } from 'zod';
 
 import { prisma, type Prisma } from '@inmobi/db';
-import { zonesBySlug } from '@inmobi/shared-types';
 
 import { publicProcedure, router } from '../server';
-
-const OperationEnum = z.enum(['SALE', 'RENT', 'TEMP_RENT']);
-const PropertyTypeEnum = z.enum(['APT', 'HOUSE', 'PH', 'LOCAL', 'TERRENO', 'OTRO']);
+import { buildPropertyWhere, CommonFilters } from './property-filters';
 
 const ListInput = z.object({
-  zoneSlug: z.string().min(1).optional(),
-  operationType: OperationEnum.optional(),
-  propertyType: PropertyTypeEnum.optional(),
+  ...CommonFilters,
   minScore: z.number().int().min(0).max(100).optional(),
   limit: z.number().int().min(1).max(48).default(24),
   offset: z.number().int().min(0).default(0),
 });
 
 export const opportunitiesRouter = router({
-  // Lista curada de oportunidades, rankeadas por score. Mismo criterio de zona que
-  // la búsqueda reversa: barrio exacto si la zona lo define, ciudad si es catch-all.
+  // Lista curada de oportunidades, rankeadas por score. Misma traducción de filtros
+  // de propiedad que la búsqueda reversa y el mapa (zona, precio, dormitorios,
+  // baños, superficie, características).
   list: publicProcedure.input(ListInput).query(async ({ input }) => {
-    const zone = input.zoneSlug ? zonesBySlug.get(input.zoneSlug) : null;
-    const zoneFilter: Prisma.PropertyWhereInput = zone
-      ? zone.mlNeighborhood
-        ? {
-            neighborhood: { equals: zone.mlNeighborhood, mode: 'insensitive' },
-            city: { equals: zone.mlCity, mode: 'insensitive' },
-          }
-        : { city: { equals: zone.mlCity, mode: 'insensitive' } }
-      : {};
-
-    const propertyFilter: Prisma.PropertyWhereInput = {
-      isActive: true,
-      ...zoneFilter,
-      ...(input.operationType ? { operationType: input.operationType } : {}),
-      ...(input.propertyType ? { propertyType: input.propertyType } : {}),
-    };
+    const propertyFilter = buildPropertyWhere(input);
 
     const where: Prisma.OpportunityWhereInput = {
       ...(input.minScore !== undefined ? { score: { gte: input.minScore } } : {}),

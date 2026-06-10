@@ -24,17 +24,10 @@ export function SearchPage() {
     placeholderData: (prev) => prev,
   });
 
-  // Reset page when filters change
+  // Reset page when any filter changes (setFilters always creates a new object).
   React.useEffect(() => {
     setPage(0);
-  }, [
-    filters.zoneSlug,
-    filters.operationType,
-    filters.propertyType,
-    filters.bedrooms,
-    filters.priceUsdMin,
-    filters.priceUsdMax,
-  ]);
+  }, [filters]);
 
   const updateFilter = <K extends keyof Filters>(k: K, v: Filters[K]) =>
     setFilters((f) => ({ ...f, [k]: v }));
