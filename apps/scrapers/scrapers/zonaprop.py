@@ -131,11 +131,28 @@ class ZonapropScraper(BaseScraper):
                     result.errors += 1
                     break
 
-                # Datadome challenge detector
+                # Datadome challenge detector. One long backoff + retry before
+                # giving up on this (type) — a single challenge is often
+                # transient, and aborting cost us the rest of the partition.
                 if len(html) < 100_000 or "Un momento" in html[:5000]:
-                    log.warning("datadome_challenge", html_size=len(html), status=status)
-                    result.errors += 1
-                    break
+                    backoff = random.uniform(60, 120)
+                    log.warning(
+                        "datadome_challenge_backoff",
+                        html_size=len(html), status=status, sleep=round(backoff),
+                    )
+                    await asyncio.sleep(backoff)
+                    try:
+                        html, status = await fetch_with_retry(
+                            lambda: self._fetch_page_html(url), logger=log
+                        )
+                    except Exception as e:
+                        log.error("fetch_failed", error=repr(e))
+                        result.errors += 1
+                        break
+                    if len(html) < 100_000 or "Un momento" in html[:5000]:
+                        log.warning("datadome_challenge_persistent", html_size=len(html))
+                        result.errors += 1
+                        break
 
                 cards = parse_listing_page(
                     html,
@@ -155,6 +172,7 @@ class ZonapropScraper(BaseScraper):
                     total = detect_total_results(html)
                     if total:
                         log.info("scrape_zone_total", total=total)
+                        result.portal_totals[prop_type] = total
 
                 log.info("page_parsed", count=len(cards))
                 result.items_found += len(cards)
@@ -195,7 +213,13 @@ class ZonapropScraper(BaseScraper):
 
 async def _resolve_zones(zone_arg: str) -> list[dict]:
     if zone_arg in ("all", "*"):
-        return [z for z in load_zones() if not z.get("mlNeighborhood")]
+        # City-level zones always work via zone['slug']. Barrio zones are only
+        # reachable when their canonical zonapropSlug was discovered from the
+        # portal's own facet links (scripts/discover_barrio_slugs.py).
+        return [
+            z for z in load_zones()
+            if not z.get("mlNeighborhood") or z.get("zonapropSlug")
+        ]
     slugs = [s.strip() for s in zone_arg.split(",") if s.strip()]
     return [get_zone(s) for s in slugs]
 
@@ -280,6 +304,7 @@ async def run(
                                 items_found=res.items_found,
                                 items_created=res.items_created,
                                 items_updated=res.items_updated,
+                                portal_totals=res.portal_totals,
                             )
                 except Exception as e:
                     total.errors += 1

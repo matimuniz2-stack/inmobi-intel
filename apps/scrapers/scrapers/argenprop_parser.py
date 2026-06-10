@@ -208,3 +208,22 @@ def parse_listing_page(
         if parsed is not None:
             out.append(parsed)
     return out
+
+
+def detect_total_results(html: str) -> int | None:
+    """Parse 'N.NNN Departamentos en Venta en ...' from h1.listing-header__title.
+
+    That count is the portal's own total for the search, which is what coverage
+    is measured against (items scraped / total published).
+    """
+    sel = Selector(html)
+    for q in ("h1.listing-header__title::text", "h1::text", "title::text"):
+        t = sel.css(q).get()
+        if not t:
+            continue
+        m = re.search(r"([\d.,]+)\s+\w+\s+en\s+(?:Venta|Alquiler)", t, re.IGNORECASE)
+        if m:
+            n = _parse_decimal_es(m.group(1))
+            if n is not None:
+                return int(n)
+    return None

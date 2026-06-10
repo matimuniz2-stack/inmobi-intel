@@ -169,6 +169,7 @@ Progreso:
 - [x] **Multi-portal** — Argenprop + ZonaProp integrados (3 portales scrapeando a Supabase). Scrape confiable corre local desde IP residencial (decisión 004).
 - [x] **Detector de oportunidades** — scorer 0-100 + razones en español (4 señales: bajo precio vs mercado, baja reciente, mucho tiempo publicada, urgencia en texto). Tablas `price_history` + `opportunities`, CLI `python -m opportunity`, página `/oportunidades`. Ver decisión 005. Migración aplicada a Supabase y primer scoreo corrido (2026-05-31, 404 oportunidades al 2026-06-01).
 - [x] **Mapa de propiedades** (`/mapa`) — geocoding real (Nominatim, gratis) + Leaflet/OSM. Pin por operación, clustering, popup con foto+info al hover. Geocoder `python -m geocode` (llena `lat`/`lng`, cacheado, cableado en `scrape-all.ps1`); tRPC `properties.forMap`. Ver decisión 009. **Pendiente: correr `python -m geocode` contra la DB** — el mapa está vacío hasta poblar coordenadas (la precisión depende de la dirección del portal; muchos avisos caen a nivel barrio + jitter).
+- [x] **Partición barrio×op×tipo (T1/T4/T5/T8)** — `zones.json` ganó `argenpropSlug`/`zonapropSlug` canónicos (descubiertos de las facetas de los portales, NO adivinados — `scripts/discover_barrio_slugs.py` + `apply_barrio_slugs.py`) en 29 barrios existentes + 19 barrios nuevos (Villa Primera, Alfar, Sierra de los Padres, etc., AP/ZP-only porque ML no los tiene en su catálogo). `scrape-all.ps1` reescrito como orquestador de matriz (portal × ~44 zonas) con checkpoint/resume diario (`logs/checkpoint-<fecha>.json`), pausas anti-bot, refresh de USD una sola vez y `-Portals`/`-MaxZones`/`-Fresh` para testing. KPI de cobertura: los 3 scrapers persisten el total publicado por el portal en `scrape_jobs.params.portal_totals` + `coverage` (sin migración). ZonaProp: backoff 60–120s + 1 retry ante DataDome; Argenprop: delay 1,5–3,5s entre páginas. Ver decisión 010. **Validado en vivo** (dry-runs por barrio en los 3 portales) pero **falta la primera corrida nocturna completa contra la DB**.
 
 ### Auditoría + mega-plan nocturno (2026-06-01)
 
@@ -183,7 +184,7 @@ Auditoría completa (14 agentes) + mesa de planes → `docs/plans/overnight-2026
 - [x] **T28/T31** — runbook de re-setup del ingest (decisión 004) + diferimientos conscientes (decisión 007).
 
 **Limitaciones conocidas (no asumir feature completa):**
-- Cobertura real de MdP todavía baja hasta correr la partición barrio×op×tipo en vivo (T1/T4/T5 necesitan validar slugs contra los portales; falta `argenpropSlug`/`zonapropSlug` en `zones.json`).
+- ~~Falta `argenpropSlug`/`zonapropSlug` en `zones.json`~~ — hecho 2026-06-10 (decisión 010). Lo que falta: la primera corrida completa para medir cobertura real con el KPI nuevo (`scrape_jobs.params.coverage`). Los barrios más grandes aún exceden el cap de Argenprop (Centro: 1.277 deptos venta vs ~200 capturables por el límite de 10 páginas de robots.txt) → siguiente palanca: partición por ambientes/precio.
 - Columnas del schema aún sin poblar: `description`, `expenses`, `amenities`, `lat/lng`, `agency_phone/email/url` (T10/T11 — el UPSERT no las escribe).
 - **Sin dedup cross-portal** (T15) ni `is_active=false` en avisos caídos (T14): la misma prop puede aparecer N veces y avisos vendidos figuran vigentes. T13 (separar ambientes/dormitorios), T14, T15 necesitan una DB para aplicar/validar migraciones → próxima sesión.
 - App sin auth real (T22): data pública en Vercel.
@@ -226,4 +227,4 @@ Plan completo en `../plan-app-scraper-inmobiliario.md`. Fases siguientes documen
 
 ---
 
-> **Última actualización**: 2026-06-09 — Feature MAPA: geocoding (Nominatim) + Leaflet/OSM en `/mapa` (decisión 009). Falta correr `python -m geocode` contra la DB para poblar coordenadas. Antes: 2026-06-01 — Auditoría + mega-plan nocturno (`docs/plans/overnight-2026-06-01-megaplan.md`); rama `overnight/cobertura-calidad-2026-06-01` con T3/T6/T9/T12/T17-19/T25/T27/T28/T31 hechos (decisiones 006, 007). Actualizá esta nota cuando avancen fases.
+> **Última actualización**: 2026-06-10 — Partición barrio×op×tipo (T1/T4/T5/T8, decisión 010): slugs canónicos por portal en zones.json (29 barrios + 19 nuevos), orquestador matriz con checkpoint/resume, KPI de cobertura en scrape_jobs.params, backoff DataDome. Rama `feat/cobertura-mdp-particion`. Falta: primera corrida nocturna completa + registrar la Scheduled Task (T29). Antes: 2026-06-09 — Feature MAPA (decisión 009), falta `python -m geocode` contra la DB. Actualizá esta nota cuando avancen fases.

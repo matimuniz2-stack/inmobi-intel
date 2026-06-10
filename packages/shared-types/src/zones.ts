@@ -22,6 +22,13 @@ export interface Zone {
   mlCityId: string;
   mlNeighborhoodId?: string;
 
+  // === Portal-specific location slugs — discovered from each portal's own
+  // barrio facet links (apps/scrapers/scripts/discover_barrio_slugs.py).
+  // A barrio zone is only scraped on Argenprop/ZonaProp when its slug is set;
+  // guessing slugs risks silently scraping the wrong location. ===
+  argenpropSlug?: string;
+  zonapropSlug?: string;
+
   /** Lowercase search terms (no accents) for autocomplete matching. */
   aliases: string[];
   /** Higher = shown earlier in autocomplete suggestions (default 0). */
