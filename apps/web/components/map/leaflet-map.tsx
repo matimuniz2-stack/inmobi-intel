@@ -16,7 +16,7 @@ export interface MapPoint {
   lng: number;
   url: string;
   title: string | null;
-  portal: 'MERCADOLIBRE' | 'ARGENPROP' | 'ZONAPROP';
+  portal: 'MERCADOLIBRE' | 'ARGENPROP' | 'ZONAPROP' | 'PROPERATI';
   operationType: 'SALE' | 'RENT' | 'TEMP_RENT';
   propertyType: 'APT' | 'HOUSE' | 'PH' | 'LOCAL' | 'TERRENO' | 'OTRO';
   priceAmount: string;
@@ -57,6 +57,7 @@ const PORTAL_LABEL: Record<MapPoint['portal'], string> = {
   MERCADOLIBRE: 'MercadoLibre',
   ARGENPROP: 'Argenprop',
   ZONAPROP: 'ZonaProp',
+  PROPERATI: 'Properati',
 };
 
 // Color del pin por operación (igual criterio que los badges de la lista).

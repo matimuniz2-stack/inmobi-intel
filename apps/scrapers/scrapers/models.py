@@ -36,6 +36,10 @@ class MlListingCard(BaseModel):
     covered_sqm: Decimal | None = None
     photos: list[str] = []
     agency_name: str | None = None
+    # Portal-provided coordinates (Properati embeds them in JSON-LD). None for
+    # portals that don't publish geo — the Nominatim geocoder fills those later.
+    lat: Decimal | None = None
+    lng: Decimal | None = None
 
 
 class UsdRateRecord(BaseModel):

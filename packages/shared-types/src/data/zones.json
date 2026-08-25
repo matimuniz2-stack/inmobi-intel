@@ -4,6 +4,7 @@
     {
       "slug": "mar-del-plata",
       "displayName": "Mar del Plata",
+      "properatiSlug": "mar-del-plata",
       "province": "Buenos Aires",
       "mlState": "Bs.As. Costa Atlántica",
       "mlCity": "Mar del Plata",
@@ -29,6 +30,7 @@
     {
       "slug": "santa-clara-del-mar",
       "displayName": "Santa Clara del Mar",
+      "properatiSlug": "santa-clara-del-mar",
       "province": "Buenos Aires",
       "mlState": "Bs.As. Costa Atlántica",
       "mlCity": "Santa Clara del Mar",

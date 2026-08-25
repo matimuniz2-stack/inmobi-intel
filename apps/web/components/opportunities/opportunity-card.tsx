@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils';
 
 interface PropertyLike {
   id: string;
-  portal: 'MERCADOLIBRE' | 'ARGENPROP' | 'ZONAPROP';
+  portal: 'MERCADOLIBRE' | 'ARGENPROP' | 'ZONAPROP' | 'PROPERATI';
   url: string;
   operationType: 'SALE' | 'RENT' | 'TEMP_RENT';
   propertyType: 'APT' | 'HOUSE' | 'PH' | 'LOCAL' | 'TERRENO' | 'OTRO';
@@ -58,12 +58,14 @@ const PORTAL_LABEL: Record<PropertyLike['portal'], string> = {
   MERCADOLIBRE: 'MercadoLibre',
   ARGENPROP: 'Argenprop',
   ZONAPROP: 'ZonaProp',
+  PROPERATI: 'Properati',
 };
 
 const PORTAL_BADGE_CLASS: Record<PropertyLike['portal'], string> = {
   MERCADOLIBRE: 'bg-yellow-300 text-yellow-950 hover:bg-yellow-300 border-yellow-400',
   ARGENPROP: 'bg-emerald-500 text-white hover:bg-emerald-500 border-emerald-600',
   ZONAPROP: 'bg-red-600 text-white hover:bg-red-600 border-red-700',
+  PROPERATI: 'bg-violet-600 text-white hover:bg-violet-600 border-violet-700',
 };
 
 // Color del score por tramo. Verde = oportunidad fuerte, ámbar = buena, gris = leve.

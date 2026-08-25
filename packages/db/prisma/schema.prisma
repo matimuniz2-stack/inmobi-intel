@@ -19,7 +19,8 @@ enum Portal {
   MERCADOLIBRE
   ARGENPROP
   ZONAPROP
-  // Fase 2+: PROPERATI, REMAX
+  PROPERATI
+  // Fase 2+: REMAX
 }
 
 enum OperationType {

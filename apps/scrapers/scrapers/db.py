@@ -61,6 +61,7 @@ INSERT INTO properties (
     bedrooms, bathrooms, total_sqm, covered_sqm,
     address_full, neighborhood, city, province,
     photos, agency_name,
+    lat, lng,
     zone_slug,
     first_seen_at, last_seen_at, last_updated_at,
     is_active
@@ -71,6 +72,7 @@ INSERT INTO properties (
     %(bedrooms)s, %(bathrooms)s, %(total_sqm)s, %(covered_sqm)s,
     %(address_full)s, %(neighborhood)s, %(city)s, %(province)s,
     %(photos)s::jsonb, %(agency_name)s,
+    %(lat)s, %(lng)s,
     %(zone_slug)s,
     now(), now(), now(),
     true
@@ -93,6 +95,10 @@ ON CONFLICT (portal, portal_id) DO UPDATE SET
     province = EXCLUDED.province,
     photos = EXCLUDED.photos,
     agency_name = EXCLUDED.agency_name,
+    -- COALESCE: a portal without geo (NULL) must not wipe coordinates the
+    -- geocoder (or a geo-bearing portal) already filled in.
+    lat = COALESCE(EXCLUDED.lat, properties.lat),
+    lng = COALESCE(EXCLUDED.lng, properties.lng),
     zone_slug = EXCLUDED.zone_slug,
     last_seen_at = now(),
     is_active = true,
@@ -191,6 +197,8 @@ def upsert_property(
         "province": card.province,
         "photos": json.dumps(card.photos),
         "agency_name": card.agency_name,
+        "lat": card.lat,
+        "lng": card.lng,
         "zone_slug": zone_slug,
     }
     cur = conn.execute(UPSERT_PROPERTY_SQL, params)
