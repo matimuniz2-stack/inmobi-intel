@@ -37,7 +37,8 @@ export const FEATURE_OPTIONS: { key: FeatureKey; label: string }[] = [
 ];
 
 export interface Filters {
-  zoneSlug: string | null;
+  /** Multi-select: vacío = cualquier zona; varias = OR entre ellas. */
+  zoneSlugs: string[];
   operationType: Operation;
   propertyType: PropertyType;
   bedrooms: BedroomsFilter;
@@ -53,7 +54,7 @@ export interface Filters {
 export const PAGE_SIZE = 24;
 
 export const DEFAULT_FILTERS: Filters = {
-  zoneSlug: null,
+  zoneSlugs: [],
   operationType: 'SALE',
   propertyType: '',
   bedrooms: '',
@@ -77,7 +78,7 @@ export function toCommonInput(f: Filters) {
         ? ('5plus' as const)
         : Number(f.bedrooms);
   return {
-    zoneSlug: f.zoneSlug ?? undefined,
+    zoneSlugs: f.zoneSlugs,
     operationType: f.operationType === '' ? undefined : f.operationType,
     propertyType: f.propertyType === '' ? undefined : f.propertyType,
     bedrooms,

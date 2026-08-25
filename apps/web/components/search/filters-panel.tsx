@@ -1,5 +1,9 @@
 'use client';
 
+import { X } from 'lucide-react';
+
+import { zonesBySlug } from '@inmobi/shared-types/zones';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -53,11 +57,31 @@ export function FiltersPanel({
       </div>
 
       <div className="space-y-2">
-        <Label>Zona</Label>
+        <Label>Zonas</Label>
         <ZoneCombobox
-          value={filters.zoneSlug}
-          onChange={(slug) => updateFilter('zoneSlug', slug)}
+          value={filters.zoneSlugs}
+          onChange={(slugs) => updateFilter('zoneSlugs', slugs)}
         />
+        {filters.zoneSlugs.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {filters.zoneSlugs.map((slug) => (
+              <button
+                key={slug}
+                type="button"
+                onClick={() =>
+                  updateFilter(
+                    'zoneSlugs',
+                    filters.zoneSlugs.filter((s) => s !== slug),
+                  )
+                }
+                className="inline-flex items-center gap-1 rounded-full border border-primary bg-primary/10 px-2.5 py-1 text-xs text-primary hover:bg-primary/20"
+              >
+                {zonesBySlug.get(slug)?.displayName ?? slug}
+                <X className="h-3 w-3" />
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="space-y-2">
@@ -95,7 +119,7 @@ export function FiltersPanel({
 
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-2">
-          <Label htmlFor="bedrooms">Dormitorios</Label>
+          <Label htmlFor="bedrooms">Ambientes</Label>
           <select
             id="bedrooms"
             value={filters.bedrooms}

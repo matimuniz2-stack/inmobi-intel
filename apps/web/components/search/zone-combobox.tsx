@@ -3,7 +3,7 @@
 import { Check, ChevronsUpDown, X } from 'lucide-react';
 import * as React from 'react';
 
-import { findZonesByQuery, zones, zonesBySlug } from '@inmobi/shared-types/zones';
+import { findZonesByQuery, zones, type Zone } from '@inmobi/shared-types/zones';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -18,11 +18,17 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 
 interface Props {
-  value: string | null;
-  onChange: (slug: string | null) => void;
+  /** Slugs seleccionados. Vacío = cualquier zona. */
+  value: string[];
+  onChange: (slugs: string[]) => void;
   placeholder?: string;
 }
 
+/**
+ * Multi-select de zonas/barrios: cada click agrega o quita una zona y el popover
+ * queda abierto para seguir sumando. El botón resume la selección; los chips
+ * removibles los dibuja el FiltersPanel debajo.
+ */
 export function ZoneCombobox({ value, onChange, placeholder = 'Cualquier zona' }: Props) {
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState('');
@@ -43,7 +49,36 @@ export function ZoneCombobox({ value, onChange, placeholder = 'Cualquier zona' }
     return { mdp, alrededores, caba };
   }, [filtered]);
 
-  const selected = value ? zonesBySlug.get(value) : null;
+  const toggle = (slug: string) => {
+    onChange(
+      value.includes(slug) ? value.filter((s) => s !== slug) : [...value, slug],
+    );
+    setQuery('');
+  };
+
+  const label =
+    value.length === 0
+      ? placeholder
+      : value.length === 1
+        ? (zones.find((z) => z.slug === value[0])?.displayName ?? value[0])
+        : `${value.length} zonas`;
+
+  const renderGroup = (heading: string, items: Zone[]) =>
+    items.length > 0 && (
+      <CommandGroup heading={heading}>
+        {items.map((z) => (
+          <CommandItem key={z.slug} value={z.slug} onSelect={() => toggle(z.slug)}>
+            <Check
+              className={cn(
+                'mr-2 h-4 w-4',
+                value.includes(z.slug) ? 'opacity-100' : 'opacity-0',
+              )}
+            />
+            {z.displayName}
+          </CommandItem>
+        ))}
+      </CommandGroup>
+    );
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -54,8 +89,8 @@ export function ZoneCombobox({ value, onChange, placeholder = 'Cualquier zona' }
           aria-expanded={open}
           className="w-full justify-between font-normal"
         >
-          <span className={cn('truncate', !selected && 'text-muted-foreground')}>
-            {selected ? selected.displayName : placeholder}
+          <span className={cn('truncate', value.length === 0 && 'text-muted-foreground')}>
+            {label}
           </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
@@ -69,91 +104,25 @@ export function ZoneCombobox({ value, onChange, placeholder = 'Cualquier zona' }
           />
           <CommandList>
             <CommandEmpty>Sin coincidencias.</CommandEmpty>
-            {value && (
+            {value.length > 0 && (
               <CommandGroup>
                 <CommandItem
                   value="__clear__"
                   onSelect={() => {
-                    onChange(null);
+                    onChange([]);
                     setOpen(false);
                     setQuery('');
                   }}
                   className="text-muted-foreground"
                 >
                   <X className="mr-2 h-4 w-4" />
-                  Quitar filtro
+                  Quitar todas ({value.length})
                 </CommandItem>
               </CommandGroup>
             )}
-            {groups.mdp.length > 0 && (
-              <CommandGroup heading="Mar del Plata + barrios">
-                {groups.mdp.map((z) => (
-                  <CommandItem
-                    key={z.slug}
-                    value={z.slug}
-                    onSelect={() => {
-                      onChange(z.slug);
-                      setOpen(false);
-                      setQuery('');
-                    }}
-                  >
-                    <Check
-                      className={cn(
-                        'mr-2 h-4 w-4',
-                        value === z.slug ? 'opacity-100' : 'opacity-0',
-                      )}
-                    />
-                    {z.displayName}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            )}
-            {groups.alrededores.length > 0 && (
-              <CommandGroup heading="Alrededores">
-                {groups.alrededores.map((z) => (
-                  <CommandItem
-                    key={z.slug}
-                    value={z.slug}
-                    onSelect={() => {
-                      onChange(z.slug);
-                      setOpen(false);
-                      setQuery('');
-                    }}
-                  >
-                    <Check
-                      className={cn(
-                        'mr-2 h-4 w-4',
-                        value === z.slug ? 'opacity-100' : 'opacity-0',
-                      )}
-                    />
-                    {z.displayName}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            )}
-            {groups.caba.length > 0 && (
-              <CommandGroup heading="CABA">
-                {groups.caba.map((z) => (
-                  <CommandItem
-                    key={z.slug}
-                    value={z.slug}
-                    onSelect={() => {
-                      onChange(z.slug);
-                      setOpen(false);
-                      setQuery('');
-                    }}
-                  >
-                    <Check
-                      className={cn(
-                        'mr-2 h-4 w-4',
-                        value === z.slug ? 'opacity-100' : 'opacity-0',
-                      )}
-                    />
-                    {z.displayName}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            )}
+            {renderGroup('Mar del Plata + barrios', groups.mdp)}
+            {renderGroup('Alrededores', groups.alrededores)}
+            {renderGroup('CABA', groups.caba)}
           </CommandList>
         </Command>
       </PopoverContent>

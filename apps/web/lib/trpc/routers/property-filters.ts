@@ -38,7 +38,7 @@ const FeatureEnum = z.enum(
 
 /** Filtros de propiedad comunes a búsqueda, mapa y oportunidades. */
 export const CommonFilters = {
-  zoneSlug: z.string().min(1).optional(),
+  zoneSlugs: z.array(z.string().min(1)).max(30).default([]),
   operationType: OperationEnum.optional(),
   propertyType: PropertyTypeEnum.optional(),
   bedrooms: BedroomsFilter.optional(),
@@ -54,25 +54,34 @@ const CommonFiltersObject = z.object(CommonFilters);
 export type CommonFilterInput = z.infer<typeof CommonFiltersObject>;
 
 /**
- * Traduce los filtros a un `where` de Prisma. Resuelve la zona elegida a un filtro
- * (city, neighborhood?):
+ * Traduce los filtros a un `where` de Prisma. Resuelve cada zona elegida a un
+ * filtro (city, neighborhood?):
  * - Zona con mlNeighborhood: barrio exacto dentro de la ciudad (barrios CABA y MdP).
  * - Zona con sólo mlCity: filtra por ciudad (catch-all de MdP y alrededores).
- * - Sin zona: sin filtro espacial.
+ * - Varias zonas: OR entre ellas (una zona ciudad junto a un barrio suyo es un
+ *   superset — válido, simplemente domina la ciudad).
+ * - Sin zonas: sin filtro espacial.
  *
  * Cada característica exige al menos una mención (OR de variantes, sobre título
  * y descripción); pedir varias es un AND.
  */
 export function buildPropertyWhere(input: CommonFilterInput): Prisma.PropertyWhereInput {
-  const zone = input.zoneSlug ? zonesBySlug.get(input.zoneSlug) : null;
-  const zoneFilter: Prisma.PropertyWhereInput = zone
-    ? zone.mlNeighborhood
-      ? {
-          neighborhood: { equals: zone.mlNeighborhood, mode: 'insensitive' },
-          city: { equals: zone.mlCity, mode: 'insensitive' },
-        }
-      : { city: { equals: zone.mlCity, mode: 'insensitive' } }
-    : {};
+  const zoneFilters: Prisma.PropertyWhereInput[] = (input.zoneSlugs ?? []).flatMap(
+    (slug) => {
+      const zone = zonesBySlug.get(slug);
+      if (!zone) return [];
+      return [
+        zone.mlNeighborhood
+          ? {
+              neighborhood: { equals: zone.mlNeighborhood, mode: 'insensitive' as const },
+              city: { equals: zone.mlCity, mode: 'insensitive' as const },
+            }
+          : { city: { equals: zone.mlCity, mode: 'insensitive' as const } },
+      ];
+    },
+  );
+  const zoneFilter: Prisma.PropertyWhereInput =
+    zoneFilters.length > 0 ? { OR: zoneFilters } : {};
 
   const featureFilters: Prisma.PropertyWhereInput[] = (input.features ?? []).map(
     (feature) => ({
