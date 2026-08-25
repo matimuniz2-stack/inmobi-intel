@@ -57,3 +57,5 @@ coverage/
 *.tgz
 
 .vercel
+
+apps/scrapers/logs/

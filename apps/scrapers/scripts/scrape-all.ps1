@@ -43,9 +43,13 @@ param(
     # Ignore today's checkpoint and re-scrape every (portal, zone).
     [switch]$Fresh,
     # Comma-separated subset of portals to run.
-    [string]$Portals = "mercadolibre,argenprop,zonaprop",
+    [string]$Portals = "mercadolibre,argenprop,zonaprop,properati",
     # Cap the number of zones per portal (testing aid). 0 = no cap.
-    [int]$MaxZones = 0
+    [int]$MaxZones = 0,
+    # Skip the delisted-deactivation step. Use when a portal is degraded (e.g.
+    # Argenprop serving only page 1): a "successful" low-coverage scrape would
+    # otherwise mass-deactivate live listings that simply fell outside coverage.
+    [switch]$SkipDeactivate
 )
 
 $ErrorActionPreference = "Stop"
@@ -123,6 +127,12 @@ function Get-PortalZones([string]$portal) {
             return @($mdpZones | Where-Object {
                 (-not $_.mlNeighborhood) -or $_.zonapropSlug })
         }
+        # Properati paginates the full result set (no cap), so the city-level
+        # zones with an explicit properatiSlug already cover everything — no
+        # barrio partition. Zones without the slug are not scrapeable there.
+        "properati" {
+            return @($mdpZones | Where-Object { $_.properatiSlug })
+        }
     }
     return @()
 }
@@ -162,6 +172,7 @@ $portalArgs = @{
     "mercadolibre" = @()                      # type inferred per card from the listing
     "argenprop"    = @("--type", $ALL_TYPES)
     "zonaprop"     = @("--type", $ALL_TYPES)
+    "properati"    = @("--type", "APT,HOUSE,TERRENO")  # PH/LOCAL don't exist in its taxonomy
 }
 # Pause between zones: ZonaProp gets the long one (DataDome rate-limits), the
 # others just a polite gap. Within a zone the scrapers already pace themselves.
@@ -169,12 +180,26 @@ $portalPause = @{
     "mercadolibre" = @(5, 15)
     "argenprop"    = @(5, 15)
     "zonaprop"     = @(45, 90)
+    "properati"    = @(5, 15)
 }
 
 # NB: don't reuse the $Portals name — PS variables are case-insensitive and the
 # param's [string] constraint would cast the array back to one joined string.
 $portalList = @($Portals.Split(",") | ForEach-Object { $_.Trim().ToLower() } | Where-Object { $_ })
 $anyOk = $false
+
+# --- Early deactivation pass (decision 011) ---
+# The end-of-run pass below never executed in practice: every run so far was
+# interrupted (console closed, DataDome stall) before reaching it, so dead
+# listings piled up for months. Deactivation compares each property against the
+# LAST successful scrape of its zone (not against now()), so running it here —
+# before tonight's scrape — settles the previous run's debt even if tonight's
+# run dies halfway again. Idempotent and cheap (one UPDATE).
+if (-not $DryRun -and -not $SkipDeactivate) {
+    "--- deactivate delisted (early pass, previous run's evidence) ---" | Tee-Object -FilePath $log -Append
+    & $poetryExe run python -m deactivate --days 7 2>&1 | Tee-Object -FilePath $log -Append
+    "early deactivate exit code: $LASTEXITCODE" | Tee-Object -FilePath $log -Append
+}
 $usdRefreshed = $false
 
 foreach ($p in $portalList) {
@@ -217,6 +242,25 @@ foreach ($p in $portalList) {
         $range = $portalPause[$p]
         $pause = Get-Random -Minimum $range[0] -Maximum $range[1]
         if (-not $DryRun) { Start-Sleep -Seconds $pause }
+    }
+}
+
+# --- Deactivate delisted properties (megaplan T14, decision 011) ---
+# Runs before the scorer so opportunities aren't computed over dead listings.
+# Conservative by design: only deactivates properties unseen for --days whose
+# (portal, zone) WAS successfully scraped within that window; blocked or
+# skipped zones are left untouched. A failure here is logged but doesn't
+# change the task's exit code.
+if ($SkipDeactivate) {
+    "--- deactivate delisted: SKIPPED (-SkipDeactivate) ---" | Tee-Object -FilePath $log -Append
+} elseif (-not $DryRun) {
+    "--- deactivate delisted ---" | Tee-Object -FilePath $log -Append
+    & $poetryExe run python -m deactivate --days 7 2>&1 | Tee-Object -FilePath $log -Append
+    $deactCode = $LASTEXITCODE
+    "deactivate exit code: $deactCode" | Tee-Object -FilePath $log -Append
+    if ($deactCode -ne 0) {
+        "WARN: deactivate failed (exit $deactCode) - stale listings still shown as active." |
+            Tee-Object -FilePath $log -Append
     }
 }
 
